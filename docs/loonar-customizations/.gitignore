@@ -1,0 +1,76 @@
+# Loonar Customizations - Ignore Files and Directories
+
+# Backups and logs
+.backups/
+logs/
+*.log
+
+# Environment files
+.env
+.env.*.backup
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+ENV/
+env.bak/
+venv.bak/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Docker
+.dockerignore
+docker-compose.override.yml.bak
+
+# Node (for UI development)
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Customization-specific
+# Keep documentation but ignore common derived files
+*.md.bak
+CHANGELOG.md.bak
