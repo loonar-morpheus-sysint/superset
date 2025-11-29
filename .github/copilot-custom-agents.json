@@ -1,0 +1,82 @@
+{
+  "agents": [
+    {
+      "id": "alerts-reports",
+      "label": "Alertas e Relatórios",
+      "description": "Automação e melhores práticas para alertas e relatórios do Superset.",
+      "docPath": "loonar/docs/ia/AlertsReports.config.agent.md"
+    },
+    {
+      "id": "async-queries-celery",
+      "label": "Async Queries / Celery",
+      "description": "Configuração de queries assíncronas e Celery.",
+      "docPath": "loonar/docs/ia/AsyncQueriesCelery.config.agent.md"
+    },
+    {
+      "id": "cache",
+      "label": "Cache",
+      "description": "Automação e melhores práticas para cache de dashboards, charts e SQL Lab.",
+      "docPath": "loonar/docs/ia/Cache.config.agent.md"
+    },
+    {
+      "id": "config-geral",
+      "label": "Configuração Geral",
+      "description": "Configuração centralizada do Superset.",
+      "docPath": "loonar/docs/ia/ConfiguringSuperset.config.agent.md"
+    },
+    {
+      "id": "country-map-tools",
+      "label": "Mapas por País",
+      "description": "Gestão de mapas customizados e GeoJSON.",
+      "docPath": "loonar/docs/ia/CountryMapTools.config.agent.md"
+    },
+    {
+      "id": "databases",
+      "label": "Banco de Dados",
+      "description": "Conexão, drivers e rotação de segredos para bancos suportados.",
+      "docPath": "loonar/docs/ia/Databases.config.agent.md"
+    },
+    {
+      "id": "event-logging",
+      "label": "Log de Eventos",
+      "description": "Automação de logging e integração com StatsD.",
+      "docPath": "loonar/docs/ia/EventLogging.config.agent.md"
+    },
+    {
+      "id": "import-export-datasources",
+      "label": "Import/Export Datasources",
+      "description": "Automação de importação/exportação de fontes de dados.",
+      "docPath": "loonar/docs/ia/ImportExportDatasources.config.agent.md"
+    },
+    {
+      "id": "map-tiles",
+      "label": "Map Tiles",
+      "description": "Configuração de fontes de tiles para mapas geoespaciais.",
+      "docPath": "loonar/docs/ia/MapTiles.config.agent.md"
+    },
+    {
+      "id": "networking-security",
+      "label": "Rede/Security",
+      "description": "Configuração de CORS, headers, CSRF, SSH e domínios.",
+      "docPath": "loonar/docs/ia/NetworkingSettings.config.agent.md"
+    },
+    {
+      "id": "sql-templating",
+      "label": "SQL Templating",
+      "description": "Gestão de macros e templates Jinja para SQL.",
+      "docPath": "loonar/docs/ia/SQLTemplating.config.agent.md"
+    },
+    {
+      "id": "theming",
+      "label": "Temas",
+      "description": "Gestão de temas, fontes e overrides de UI.",
+      "docPath": "loonar/docs/ia/Theming.config.agent.md"
+    },
+    {
+      "id": "timezones",
+      "label": "Timezones",
+      "description": "Gestão de timezones em dados, backend e frontend.",
+      "docPath": "loonar/docs/ia/Timezones.config.agent.md"
+    }
+  ]
+}
