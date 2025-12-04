@@ -18,6 +18,7 @@
 import os
 from datetime import timedelta
 from typing import Any, Optional
+from urllib.parse import urlparse
 
 from celery.schedules import crontab
 
@@ -106,15 +107,42 @@ class CeleryConfig:
 
 CELERY_CONFIG = CeleryConfig
 
+# Static assets / CDN support
+STATIC_ASSETS_PREFIX = os.environ.get("STATIC_ASSETS_PREFIX", "").rstrip("/")
+
+
+def _parse_extra_csp_hosts() -> set[str]:
+    hosts: set[str] = set()
+    if asset_prefix := STATIC_ASSETS_PREFIX:
+        parsed = urlparse(asset_prefix)
+        if parsed.scheme and parsed.netloc:
+            hosts.add(f"{parsed.scheme}://{parsed.netloc}")
+
+    extra_hosts = os.environ.get("CSP_ADDITIONAL_HOSTS", "")
+    for host in (value.strip() for value in extra_hosts.split(",")):
+        if host:
+            hosts.add(host)
+
+    return hosts
+
+
+def _extend_csp_sources(base_sources: list[str]) -> list[str]:
+    extra_hosts = _parse_extra_csp_hosts()
+    extras = [host for host in extra_hosts if host not in base_sources]
+    return base_sources + extras if extras else base_sources
+
+
 # Security Settings
 TALISMAN_ENABLED = True
 TALISMAN_CONFIG = {
     "content_security_policy": {
-        "default-src": ["'self'"],
-        "img-src": ["'self'", "data:", "https:"],
-        "script-src": ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
-        "style-src": ["'self'", "'unsafe-inline'"],
-        "font-src": ["'self'", "data:"],
+        "default-src": _extend_csp_sources(["'self'"]),
+        "img-src": _extend_csp_sources(["'self'", "data:", "https:"]),
+        "script-src": _extend_csp_sources(
+            ["'self'", "'unsafe-inline'", "'unsafe-eval'"]
+        ),
+        "style-src": _extend_csp_sources(["'self'", "'unsafe-inline'"]),
+        "font-src": _extend_csp_sources(["'self'", "data:"]),
     },
     "force_https": True,
     "force_https_permanent": True,
