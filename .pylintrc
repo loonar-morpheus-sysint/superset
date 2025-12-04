@@ -36,7 +36,7 @@ persistent=yes
 
 # List of plugins (as comma separated values of python modules names) to load,
 # usually to register additional checkers.
-load-plugins=superset.extensions.pylint
+load-plugins=superset_pylint_plugin
 
 # Use multiple processes to speed up Pylint.
 jobs=2
@@ -53,7 +53,7 @@ extension-pkg-whitelist=pyarrow
 
 [MESSAGES CONTROL]
 disable=all
-enable=disallowed-json-import,disallowed-sql-import,consider-using-transaction
+enable=disallowed-sql-import,consider-using-transaction
 
 
 [REPORTS]

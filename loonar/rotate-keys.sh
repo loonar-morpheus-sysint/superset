@@ -3,15 +3,21 @@
 # Gera segredos compatíveis para cada contexto
 
 set -e
-SCRIPTDIR="$(dirname "$0")"
-ENV_SAMPLE="$SCRIPTDIR/../docker/.env-sample"
-ENV_FILE="$SCRIPTDIR/../docker/.env"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ENV_SAMPLE="$SCRIPT_DIR/.env-sample"
+ENV_FILE="$SCRIPT_DIR/.env"
 TMP_FILE="${ENV_FILE}.tmp"
+
+# Verificar se .env-sample existe
+if [ ! -f "$ENV_SAMPLE" ]; then
+    echo "❌ Erro: Arquivo .env-sample não encontrado em $SCRIPT_DIR/"
+    exit 1
+fi
 
 # Se .env já existe, faz backup
 if [ -f "$ENV_FILE" ]; then
   TS=$(date +%Y%m%d%H%M)
-  cp "$ENV_FILE" "$SCRIPTDIR/../docker/env-backup-$TS"
+  cp "$ENV_FILE" "$SCRIPT_DIR/env-backup-$TS"
   echo "Backup do .env criado em env-backup-$TS"
 fi
 # Funções para geração de segredos
@@ -31,12 +37,14 @@ random_mapbox() {
 awk -v gen_secret="$(random_secret)" -v gen_pass="$(random_password)" -v gen_mapbox="$(random_mapbox)" '
   BEGIN { rotatable=0 }
   {
-    if ($0 ~ /^# CHANGE THIS! \[ROTATABLE\]/) rotatable=1
+    if ($0 ~ /^# CHANGE THIS! \[ROTATABLE\]/) {
+      rotatable=1
+      next
+    }
     else if ($0 ~ /^#/) rotatable=0
 
     if (rotatable && $0 ~ /=__ROTATE_ME__/) {
       var=gensub(/=.*/, "", "g", $0)
-      print "# CHANGE THIS! [ROTATABLE]"
       if (var ~ /SUPERSET_SECRET_KEY/) print var "=" gen_secret
       else if (var ~ /(PASSWORD|USER)/) print var "=" gen_pass
       else if (var ~ /MAPBOX_API_KEY/) print var "=" gen_mapbox

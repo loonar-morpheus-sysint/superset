@@ -1,0 +1,199 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+# -----------------------------------------------------------------------
+# We don't support docker compose for production environments.
+# If you choose to use this type of deployment make sure to
+# create you own docker environment file (docker/.env) with your own
+# unique random secure passwords and SECRET_KEY.
+#
+# For verbose logging during development:
+# - Set SUPERSET_LOG_LEVEL=debug in docker/.env-local for detailed Superset logs
+# -----------------------------------------------------------------------
+# =============================
+# PRODUÇÃO: Checklist de Segurança
+# - NUNCA versionar segredos reais
+# - Use superset_config.py seguro
+# - Não rode containers como root
+# - Use proxy reverso (nginx) com TLS/SSL
+# - Proteja volumes e dados
+# - Use imagens oficiais e tags de versão
+# - Configure healthchecks
+# - Atualize dependências regularmente
+# Consulte: https://superset.apache.org/docs/security/securing_superset/#appendix-a-production-deployment-checklist
+# =============================
+# =============================
+# SECURITY WARNING (PRODUCTION):
+# NUNCA versionar segredos reais em docker/.env ou docker/.env-local!
+# Gere um arquivo docker/.env seguro para produção, com:
+# - SECRET_KEY forte e único
+# - Senhas de banco, Redis, etc. fortes
+# - Variáveis de ambiente sensíveis protegidas
+# Recomenda-se usar um gerenciador de segredos (ex: Vault, AWS Secrets Manager)
+# =============================
+# =============================
+# RECOMENDAÇÃO: Utilize um superset_config.py customizado e seguro!
+# - Desabilite DEBUG e CORS aberto
+# - Configure LOGGING apropriado
+# - Proteja endpoints e recursos
+# - Consulte https://superset.apache.org/docs/security/securing_superset/#production-configuration
+# =============================
+x-superset-env: &superset-env
+  - path: ./loonar/.env # default
+    required: true
+  - path: ./loonar/.env-local # optional override
+    required: false
+
+x-superset-volumes:
+  &superset-volumes # /app/pythonpath_docker will be appended to the PYTHONPATH in the final container
+  - ./docker:/app/docker
+  - ./loonar/pythonpath:/app/pythonpath
+  - ./loonar/volumes/superset_home:/app/superset_home
+  - ./loonar/logo:/app/superset/static/assets/images/loonar:ro
+
+x-common-build: &common-build
+  context: .
+  target: lean
+  cache_from:
+    - apache/superset-cache:3.10-slim-bookworm
+
+services:
+# Use sempre imagens oficiais e tags de versão específicas para produção
+  redis:
+    image: redis:7
+    container_name: superset_cache
+    restart: unless-stopped
+    user: "999:999"
+    env_file: *superset-env
+    command: |
+      sh -c 'redis-server /etc/redis/redis.conf --requirepass "$${REDIS_PASSWORD}"'
+    volumes:
+      - ./docker/redis/redis.conf:/etc/redis/redis.conf:ro
+      - ./loonar/volumes/redis:/data
+    healthcheck:
+      test: ["CMD", "sh", "-c", "redis-cli -a $$REDIS_PASSWORD ping || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+    networks:
+      - superset
+
+  db:
+    env_file: *superset-env
+    # Use sempre imagens oficiais e tags de versão específicas para produção
+    image: postgres:16
+    container_name: superset_db
+    restart: unless-stopped
+    volumes:
+      - ./loonar/volumes/db_home:/var/lib/postgresql/data
+      - ./docker/docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - superset
+
+  superset_app:
+    env_file: *superset-env
+    # Opção 1: Build local (lean)
+    build:
+      <<: *common-build
+      network: host
+      extra_hosts:
+        - "host.docker.internal:host-gateway"
+    # Opção 2: Usar imagem oficial (descomente as linhas abaixo e comente o 'build' acima)
+    # image: apache/superset:latest
+    container_name: superset_app
+    command: ["/app/docker/docker-bootstrap.sh", "app-gunicorn"]
+    user: "root"
+    volumes: *superset-volumes
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8088/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - superset
+
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: superset_nginx
+    restart: unless-stopped
+    depends_on:
+      superset_app:
+        condition: service_healthy
+    env_file: *superset-env
+    ports:
+      - 80:80
+      - 443:443
+    command: ["/bin/sh", "-c", "envsubst '$$SUPERSET_HOST $$SSL_CERT $$SSL_KEY $$SSL_TRUSTED' < /etc/nginx/templates/superset.conf.template > /etc/nginx/conf.d/superset.conf && nginx -g 'daemon off;'" ]
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/nginx/conf.d:/etc/nginx/conf.d:rw
+      - ./docker/nginx/templates:/etc/nginx/templates:ro
+      - ./loonar/ssl-certs:/etc/nginx/certs:ro
+      - ./loonar/volumes/nginx_logs:/var/log/nginx
+    # Para produção, configure regras de firewall para expor apenas as portas necessárias
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - superset
+
+volumes:
+  superset_home:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${SUPERSET_VOLUMES_PATH:-${PWD}/loonar/volumes}/superset_home
+  db_home:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${SUPERSET_VOLUMES_PATH:-${PWD}/loonar/volumes}/db_home
+  redis:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${SUPERSET_VOLUMES_PATH:-${PWD}/loonar/volumes}/redis
+  nginx_logs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${SUPERSET_VOLUMES_PATH:-${PWD}/loonar/volumes}/nginx_logs
+# =============================
+# VOLUMES: Garanta persistência e proteção dos dados!
+# - Configure backup periódico dos volumes
+# - Restrinja acesso aos volumes apenas aos serviços necessários
+# - Proteja dados sensíveis (ex: banco, uploads, logs)
+# =============================
+
+networks:
+  superset:
+    name: superset
+    driver: bridge

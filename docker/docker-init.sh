@@ -35,6 +35,40 @@ Init Step ${1}/${STEP_CNT} [${2}] -- ${3}
 ######################################################################
 EOF
 }
+
+# Retry function with exponential backoff for database operations
+retry_with_backoff() {
+    local max_attempts=5
+    local timeout=1
+    local attempt=0
+    local exitCode=0
+
+    while (( $attempt < $max_attempts ))
+    do
+        set +e
+        "$@"
+        exitCode=$?
+        set -e
+
+        if [[ $exitCode == 0 ]]
+        then
+            break
+        fi
+
+        echo "Failure! Retrying in $timeout.." 1>&2
+        sleep $timeout
+        attempt=$(( attempt + 1 ))
+        timeout=$(( timeout * 2 ))
+    done
+
+    if [[ $exitCode != 0 ]]
+    then
+        echo "Command failed after $max_attempts attempts: $*" 1>&2
+    fi
+
+    return $exitCode
+}
+
 ADMIN_PASSWORD="${ADMIN_PASSWORD:-admin}"
 # If Cypress run – overwrite the password for admin and export env variables
 if [ "$CYPRESS_CONFIG" == "true" ]; then
@@ -45,7 +79,7 @@ if [ "$CYPRESS_CONFIG" == "true" ]; then
 fi
 # Initialize the database
 echo_step "1" "Starting" "Applying DB migrations"
-superset db upgrade
+retry_with_backoff superset db upgrade
 echo_step "1" "Complete" "Applying DB migrations"
 
 # Create an admin user
