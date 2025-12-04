@@ -152,7 +152,8 @@ ENV SUPERSET_HOME="/app/superset_home" \
     PYTHONPATH="/app/pythonpath" \
     SUPERSET_PORT="8088"
 
-# Copy the entrypoints, make them executable in userspace
+# Copy the docker scripts and entrypoints, make them executable in userspace
+COPY --chmod=755 docker/*.sh /app/docker/
 COPY --chmod=755 docker/entrypoints /app/docker/entrypoints
 
 WORKDIR /app
@@ -194,7 +195,20 @@ RUN /app/docker/apt-install.sh \
       libsasl2-modules-gssapi-mit \
       libpq-dev \
       libecpg-dev \
-      libldap2-dev
+      libldap2-dev \
+      unixodbc-dev \
+      freetds-dev \
+      freetds-bin \
+      tdsodbc \
+      gnupg2
+
+# Install Microsoft ODBC Driver 18 for SQL Server
+RUN curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /usr/share/keyrings/microsoft-prod.gpg \
+    && curl -fsSL https://packages.microsoft.com/config/debian/12/prod.list | tee /etc/apt/sources.list.d/mssql-release.list \
+    && apt-get update \
+    && ACCEPT_EULA=Y apt-get install -y msodbcsql18 \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy compiled things from previous stages
 COPY --from=superset-node /app/superset/static/assets superset/static/assets

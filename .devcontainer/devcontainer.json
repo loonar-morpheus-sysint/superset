@@ -59,7 +59,8 @@
         "ms-python.vscode-pylance",
         "charliermarsh.ruff",
         "dbaeumer.vscode-eslint",
-        "esbenp.prettier-vscode"
+        "esbenp.prettier-vscode",
+        "Redis.redis-for-vscode"
       ]
     }
   }
