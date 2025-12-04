@@ -169,7 +169,8 @@ EMAIL_NOTIFICATIONS = bool(SMTP_HOST)
 
 # Logging
 ENABLE_TIME_ROTATE = True
-LOG_LEVEL = os.environ.get("SUPERSET_LOG_LEVEL", "INFO")
+_log_level = os.environ.get("SUPERSET_LOG_LEVEL", "INFO")
+LOG_LEVEL = _log_level.upper() if isinstance(_log_level, str) else _log_level
 LOG_FORMAT = "%(asctime)s:%(levelname)s:%(name)s:%(message)s"
 
 # Session
