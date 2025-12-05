@@ -24,7 +24,7 @@ upstream superset {
 # HTTP - Redirect to HTTPS
 server {
     listen 80;
-    server_name ${SUPERSET_HOST} finops.sondahybrid.com finops-hom.sondahybrid.com;
+    server_name ${SUPERSET_HOST};
 
     location /.well-known/acme-challenge/ {
         root /var/www/certbot;
@@ -46,7 +46,7 @@ server {
 server {
     listen 443 ssl;
     http2 on;
-    server_name ${SUPERSET_HOST} finops.sondahybrid.com finops-hom.sondahybrid.com;
+    server_name ${SUPERSET_HOST};
 
     # SSL certificates (full chain and private key)
     ssl_certificate     ${SSL_CERT};

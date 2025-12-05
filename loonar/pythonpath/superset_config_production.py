@@ -30,7 +30,7 @@ if not SECRET_KEY:
 SUPERSET_ENV = "production"
 
 # Allowed host (used by some reverse proxy setups)
-SUPERSET_HOST = os.environ.get("SUPERSET_HOST", "finops.sondahybrid.com")
+SUPERSET_HOST = os.environ.get("SUPERSET_HOST", "localhost")
 
 # Database
 DATABASE_DIALECT = os.environ.get("DATABASE_DIALECT", "postgresql")
