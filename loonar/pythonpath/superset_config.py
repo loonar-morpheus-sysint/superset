@@ -20,6 +20,7 @@ from datetime import timedelta
 from typing import Any, Optional
 from urllib.parse import urlparse
 
+from cachelib.redis import RedisCache
 from celery.schedules import crontab
 
 # Security
@@ -59,8 +60,16 @@ REDIS_CELERY_DB = int(os.environ.get("REDIS_CELERY_DB", 0))
 REDIS_RESULTS_DB = int(os.environ.get("REDIS_RESULTS_DB", 1))
 
 REDIS_URL = f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/{REDIS_CELERY_DB}"
-RESULTS_BACKEND = (
+REDIS_RESULTS_URL = (
     f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/{REDIS_RESULTS_DB}"
+)
+
+RESULTS_BACKEND = RedisCache(
+    host=REDIS_HOST,
+    port=REDIS_PORT,
+    password=REDIS_PASSWORD or None,
+    db=REDIS_RESULTS_DB,
+    key_prefix="superset_results_",
 )
 
 # Cache
@@ -82,7 +91,7 @@ DATA_CACHE_CONFIG = {
 class CeleryConfig:
     broker_url = REDIS_URL
     imports = ("superset.sql_lab", "superset.tasks.scheduler")
-    result_backend = RESULTS_BACKEND
+    result_backend = REDIS_RESULTS_URL
     worker_prefetch_multiplier = 1
     task_acks_late = True
     task_annotations = {
