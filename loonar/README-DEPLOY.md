@@ -47,7 +47,3 @@ Os dados persistentes agora usam **volumes gerenciados pelo Docker**, eliminando
 - Problemas comuns: Consulte [QUICKSTART.md](QUICKSTART.md#-resolução-de-problemas-comuns)
 - Documentação completa: [DEPLOY.md](DEPLOY.md)
 - Superset oficial: https://superset.apache.org/
-
----
-
-**Versão:** 2.0 - Sistema de deploy unificado

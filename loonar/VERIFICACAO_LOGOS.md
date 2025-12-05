@@ -3,24 +3,29 @@
 ## ✅ Mudanças Aplicadas
 
 ### 1. Arquivos de Logo
-- **Local**: `/home/devopsvanilla/_prj/loonar/loonar-morpheus-sysint/superset/loonar/logo/`
+
+- **Local**: `<local do repositório>/loonar-morpheus-sysint/superset/loonar/logo/`
 - **Arquivos**:
   - `logo-light.png` - Logo para modo claro (12.9 KB)
   - `logo-dark.png` - Logo para modo escuro (12.9 KB)
 
 ### 2. Docker Compose
+
 **Arquivo**: `docker-compose-loonar.yml`
 
 Volumes adicionados:
+
 ```yaml
 - ./loonar/pythonpath:/app/pythonpath
 - ./loonar/logo:/app/superset/static/assets/images/loonar:ro
 ```
 
 ### 3. Configuração do Superset
+
 **Arquivo**: `loonar/pythonpath/superset_config.py`
 
 Configurações aplicadas:
+
 ```python
 APP_NAME = "Loonar FinOps"
 APP_ICON = "/static/assets/images/loonar/logo-light.png"
@@ -89,31 +94,36 @@ proxy_set_header X-Forwarded-Proto $scheme;
 ## 🔍 Como Verificar
 
 ### 1. Verificar se os containers estão rodando
+
 ```bash
-cd /home/devopsvanilla/_prj/loonar/loonar-morpheus-sysint/superset
+cd <local do repositório>/loonar-morpheus-sysint/superset
 docker compose -f docker-compose-loonar.yml ps
 ```
 
 Todos devem estar **healthy**.
 
 ### 2. Verificar se os arquivos estão montados corretamente
+
 ```bash
 docker compose -f docker-compose-loonar.yml exec superset_app \
   ls -lh /app/superset/static/assets/images/loonar/
 ```
 
 Deve mostrar:
+
 - `logo-dark.png` (13K)
 - `logo-light.png` (13K)
 
 ### 3. Verificar se a configuração foi carregada
+
 ```bash
 docker compose -f docker-compose-loonar.yml exec superset_app bash -c \
   "python3 -c 'from superset import config; print(config.APP_NAME, config.APP_ICON)'"
 ```
 
 Deve mostrar:
-```
+
+```text
 Loaded your LOCAL configuration at [/app/pythonpath/superset_config.py]
 Loonar FinOps /static/assets/images/loonar/logo-light.png
 ```
@@ -145,6 +155,7 @@ Loonar FinOps /static/assets/images/loonar/logo-light.png
 2. **Fazer hard refresh** (Ctrl + F5)
 3. **Tentar em modo anônimo** do navegador
 4. **Verificar logs do container**:
+
    ```bash
    docker compose -f docker-compose-loonar.yml logs superset_app | tail -50
    ```
@@ -200,6 +211,7 @@ chmod 644 loonar/logo/*.png
 Se precisar voltar aos logos originais:
 
 1. Editar `loonar/pythonpath/superset_config.py`:
+
    ```python
    APP_ICON = "/static/assets/images/superset-logo-horiz.png"
    # Remover THEME_DEFAULT e THEME_DARK customizados
@@ -208,6 +220,7 @@ Se precisar voltar aos logos originais:
    ```
 
 2. Reiniciar container:
+
    ```bash
    docker compose -f docker-compose-loonar.yml restart superset_app
    ```

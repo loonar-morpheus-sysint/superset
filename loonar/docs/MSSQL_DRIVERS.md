@@ -14,7 +14,7 @@ Esta instalação do Superset possui **dois drivers** para conexão com Microsof
 Após qualquer modificação nos arquivos de requisitos ou Dockerfile, reconstrua a imagem:
 
 ```bash
-cd /home/devopsvanilla/_prj/loonar/loonar-morpheus-sysint/superset
+cd <local do repositório>/loonar-morpheus-sysint/superset
 docker-compose -f docker-compose-loonar.yml build superset_app
 docker-compose -f docker-compose-loonar.yml up -d
 ```

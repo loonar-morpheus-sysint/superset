@@ -18,6 +18,7 @@ O script `up.sh` lista todos os contextos Docker, permite escolher o alvo (local
 ## 📋 Cenários Práticos
 
 ### Cenário 1: Desenvolvimento Local
+
 ```bash
 cd loonar
 ./up.sh
@@ -28,6 +29,7 @@ cd loonar
 ```
 
 ### Cenário 2: Servidor Remoto (Docker Context)
+
 ```bash
 # 1. Criar contexto remoto (uma vez)
 docker context create producao --docker "host=ssh://user@servidor.com"
@@ -41,6 +43,7 @@ cd loonar
 ```
 
 ### Cenário 3: Servidor Remoto (SSH direto)
+
 ```bash
 # 1. Clone o repositório no servidor remoto e gere o .env
 ssh user@servidor.com "git clone <repo> superset && cd superset/loonar && ./rotate-keys.sh"
@@ -78,7 +81,7 @@ docker compose \
 
 ## 📊 Estrutura Essencial
 
-```
+```text
 loonar/
 ├── up.sh              # Script interativo (contextos + redes)
 ├── down.sh            # Encerrar serviços
@@ -127,6 +130,7 @@ docker compose -f docker-compose-loonar.yml logs -f superset_app
 ### Erro: "Permission denied: '/app/superset_home/sqllab'"
 
 **Solução:**
+
 ```bash
 cd loonar
 ./setup.sh  # Re-executa configuração
@@ -136,6 +140,7 @@ cd loonar
 ### Container reiniciando infinitamente
 
 **Solução:**
+
 ```bash
 # Ver o erro
 docker logs superset_init
@@ -149,6 +154,7 @@ docker logs superset_init
 ### Porta 80 já em uso
 
 **Solução:**
+
 ```bash
 # Edite docker-compose-loonar.yml e mude as portas:
 ports:

@@ -6,7 +6,7 @@ Este documento contém exemplos práticos e completos de cada modo de deploy.
 
 ```bash
 # 1. Preparar ambiente
-cd /home/devopsvanilla/_prj/loonar/loonar-morpheus-sysint/superset
+cd <local do repositório>/loonar-morpheus-sysint/superset
 
 # 2. Gerar segredos
 cd loonar
@@ -85,7 +85,7 @@ docker ps
 docker context use default
 
 # 3. Preparar deploy local
-cd /home/devopsvanilla/_prj/loonar/loonar-morpheus-sysint/superset/loonar
+cd <local do repositório>/loonar-morpheus-sysint/superset/loonar
 
 # 4. Executar deploy
 ./deploy.sh
@@ -140,7 +140,7 @@ ssh admin@servidor.exemplo.com
 # ssh-copy-id admin@servidor.exemplo.com
 
 # 2. Preparar deploy local
-cd /home/devopsvanilla/_prj/loonar/loonar-morpheus-sysint/superset/loonar
+cd <local do repositório>/loonar-morpheus-sysint/superset/loonar
 
 # 3. Executar deploy
 ./deploy.sh
@@ -210,7 +210,7 @@ cd /opt/superset
 
 ## 🔄 Exemplo 4: Atualização de Deploy Existente
 
-### Local:
+### Local
 
 ```bash
 cd loonar
@@ -228,7 +228,7 @@ git pull
 ./up.sh
 ```
 
-### Remoto via SSH:
+### Remoto via SSH
 
 ```bash
 # Conectar ao servidor
@@ -254,7 +254,7 @@ docker compose --env-file=./loonar/.env -f docker-compose-loonar.yml build
 
 ## 🐛 Exemplo 5: Troubleshooting
 
-### Verificar logs local:
+### Verificar logs local
 
 ```bash
 # Logs da aplicação
@@ -268,7 +268,7 @@ cd loonar
 docker compose --env-file=./.env -f ../docker-compose-loonar.yml logs -f
 ```
 
-### Verificar logs remoto (via SSH):
+### Verificar logs remoto (via SSH)
 
 ```bash
 ssh admin@servidor.exemplo.com
@@ -283,7 +283,7 @@ cd /opt/superset
 docker logs -f superset_app
 ```
 
-### Resolver problemas de permissão:
+### Resolver problemas de permissão
 
 ```bash
 # Local
@@ -300,7 +300,7 @@ ssh admin@servidor.exemplo.com \
 
 ## 📊 Exemplo 6: Backup e Restauração
 
-### Backup local:
+### Backup local
 
 ```bash
 # Parar serviços
@@ -314,7 +314,7 @@ tar czf superset-backup-$(date +%Y%m%d).tar.gz volumes/
 ./up.sh
 ```
 
-### Backup remoto:
+### Backup remoto
 
 ```bash
 # Parar serviços no servidor
@@ -331,7 +331,7 @@ scp admin@servidor.exemplo.com:/opt/superset/superset-backup-*.tar.gz .
 ssh admin@servidor.exemplo.com "/opt/superset/manage-superset.sh start"
 ```
 
-### Restauração:
+### Restauração
 
 ```bash
 # Local
@@ -352,7 +352,7 @@ ssh admin@servidor.exemplo.com "/opt/superset/manage-superset.sh start"
 
 ## 🎓 Dicas Avançadas
 
-### Usar variáveis de ambiente customizadas:
+### Usar variáveis de ambiente customizadas
 
 ```bash
 # Editar .env para produção
@@ -363,7 +363,7 @@ SUPERSET_VOLUMES_PATH=/data/superset/volumes  # Para contexto remoto
 SUPERSET_LOG_LEVEL=WARNING                     # Menos verboso
 ```
 
-### Monitorar recursos:
+### Monitorar recursos
 
 ```bash
 # Local
@@ -373,7 +373,7 @@ docker stats
 ssh admin@servidor.exemplo.com "docker stats --no-stream"
 ```
 
-### Limpar recursos antigos:
+### Limpar recursos antigos
 
 ```bash
 # Local
