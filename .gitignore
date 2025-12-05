@@ -140,3 +140,4 @@ loonar/volumes
 /loonar/ssl-certs
 
 volumes/
+/loonar/ad-user.txt
