@@ -1,20 +1,17 @@
 # 🚀 Guia Rápido - Deploy do Superset Loonar
 
-## ⚡ Início Rápido (3 passos)
+## ⚡ Início Rápido (2 passos)
 
 ```bash
 # 1. Gerar segredos (primeira vez)
 cd loonar
 ./rotate-keys.sh
 
-# 2. Executar deploy
-./deploy.sh
-
-# 3. Escolher opção no menu:
-#    1 - Local (para testes/dev na máquina atual)
-#    2 - Remoto via Docker Context (precisa ter contexto configurado)
-#    3 - Remoto via SSH (deploy direto no servidor)
+# 2. Executar o deploy interativo
+./up.sh   # escolha o contexto Docker desejado quando solicitado
 ```
+
+O script `up.sh` lista todos os contextos Docker, permite escolher o alvo (local ou remoto) e cria os volumes/persistência automaticamente usando volumes gerenciados pelo Docker.
 
 ---
 
@@ -23,133 +20,73 @@ cd loonar
 ### Cenário 1: Desenvolvimento Local
 ```bash
 cd loonar
-./deploy.sh
-# Escolher opção 1
-# Confirmar com 's'
-
-# Aguardar setup completar...
-
-# Iniciar Superset
 ./up.sh
+# selecione o contexto "default" (ou pressione Enter para manter o atual)
 
-# Acessar em: http://localhost:8088 ou http://finops-hom.sondahybrid.com
-# Login: admin / admin
+# Acesse em: http://localhost:8088 ou http://finops-hom.sondahybrid.com
+# Login padrão: admin / admin (troque após o primeiro acesso)
 ```
 
-### Cenário 2: Servidor Remoto (com Docker Context)
+### Cenário 2: Servidor Remoto (Docker Context)
 ```bash
-# Pré-requisito: Criar contexto Docker
+# 1. Criar contexto remoto (uma vez)
 docker context create producao --docker "host=ssh://user@servidor.com"
-docker context use producao
-docker ps  # Testar
 
-# Deploy
+# 2. Executar o script normalmente na sua máquina
 cd loonar
-./deploy.sh
-# Escolher opção 2
-# Informar contexto: producao
-# Informar diretório: /opt/superset
-# Confirmar com 's'
+./up.sh
+# selecione o contexto "producao" na lista apresentada
 
-# Aguardar setup completar...
-
-# Iniciar serviços
-docker context use producao
-cd /opt/superset
-docker compose --env-file=./loonar/.env -f docker-compose-loonar.yml up -d
+# O script fará o deploy usando o daemon remoto sem exigir diretórios de volumes no host
 ```
 
-### Cenário 3: Servidor Remoto (via SSH)
+### Cenário 3: Servidor Remoto (SSH direto)
 ```bash
-# Pré-requisito: SSH configurado
-ssh user@servidor.com  # Deve conectar sem senha
+# 1. Clone o repositório no servidor remoto e gere o .env
+ssh user@servidor.com "git clone <repo> superset && cd superset/loonar && ./rotate-keys.sh"
 
-# Deploy
-cd loonar
-./deploy.sh
-# Escolher opção 3
-# Informar host: user@servidor.com
-# Informar diretório: /opt/superset
-# Confirmar com 's'
-
-# Aguardar setup completar...
-
-# Conectar ao servidor e iniciar
+# 2. Execute o script já no servidor
 ssh user@servidor.com
-cd /opt/superset
-./manage-superset.sh start
-
-# Ou remotamente:
-ssh user@servidor.com "/opt/superset/manage-superset.sh start"
+cd superset/loonar
+./up.sh
+# selecione o contexto "default" (você está executando diretamente no host)
 ```
 
 ---
 
 ## 🔧 Comandos de Gerenciamento
 
-### Local:
 ```bash
-./loonar/up.sh              # Iniciar
-./loonar/down.sh            # Parar
-./loonar/down.sh -v         # Parar e remover volumes
-docker logs -f superset_app # Ver logs
-```
-
-### Remoto (via manage-superset.sh):
-```bash
-./manage-superset.sh start    # Iniciar
-./manage-superset.sh stop     # Parar
-./manage-superset.sh restart  # Reiniciar
-./manage-superset.sh status   # Status
-./manage-superset.sh logs     # Ver logs
-./manage-superset.sh logs superset_app  # Logs de serviço específico
+./loonar/up.sh                # Deploy/atualização (context aware)
+./loonar/down.sh              # Parar serviços
+./loonar/down.sh -v           # Parar e remover volumes gerenciados
+docker compose \
+  --env-file loonar/.env \
+  -f docker-compose-loonar.yml logs -f  # Ver logs detalhados
 ```
 
 ---
 
 ## 🐛 Resolução de Problemas Comuns
 
-### Erro: "Arquivo .env não encontrado"
-```bash
-cd loonar
-./rotate-keys.sh
-```
-
-### Erro: "Missing required variable"
-```bash
-# Verificar quais variáveis estão faltando
-cat loonar/.env | grep -E "(SUPERSET_SECRET_KEY|POSTGRES_PASSWORD|REDIS_PASSWORD|SUPERSET_HOST)"
-
-# Se alguma estiver vazia, gerar novamente
-./loonar/rotate-keys.sh
-```
-
-### Erro de permissão nos volumes
-```bash
-# Local
-sudo chown -R 999:999 loonar/volumes/db_home loonar/volumes/redis
-sudo chmod 700 loonar/volumes/db_home loonar/volumes/redis
-
-# Remoto
-ssh user@servidor "sudo chown -R 999:999 /opt/superset/loonar/volumes/{db_home,redis}"
-```
+- **`.env` ausente** → execute `./loonar/rotate-keys.sh`
+- **Variável obrigatória vazia** → edite `loonar/.env` ou gere novamente com `rotate-keys.sh`
+- **Contexto inválido** → confirme com `docker context ls` e rode `./loonar/up.sh` novamente
+- **Volumes** → agora são gerenciados pelo Docker (`docker volume ls`), não há necessidade de criar diretórios manualmente
 
 ---
 
-## 📊 Estrutura de Arquivos
+## 📊 Estrutura Essencial
 
 ```
 loonar/
-├── deploy.sh                    # ← SCRIPT PRINCIPAL
-├── setup-local.sh               # Setup para instalação local
-├── setup-remote-context.sh      # Setup para Docker Context remoto
-├── setup-remote-ssh.sh          # Setup para SSH remoto
-├── up.sh                        # Iniciar local
-├── down.sh                      # Parar local
-├── rotate-keys.sh               # Gerar segredos
-├── .env                         # Configurações (NÃO versionar!)
-├── DEPLOY.md                    # Documentação completa
-└── volumes/                     # Dados persistentes
+├── up.sh              # Script interativo (contextos + redes)
+├── down.sh            # Encerrar serviços
+├── rotate-keys.sh     # Rotacionar segredos do .env
+├── setup-local.sh     # Utilitário legado (opcional)
+├── setup-remote-ssh.sh# Utilitário legado (opcional)
+├── README*.md         # Documentação
+└── .env               # Configurações (NÃO versionar)
 ```
 
 ---
@@ -157,66 +94,35 @@ loonar/
 ## 🔐 Segurança - Checklist
 
 - [ ] Executou `./rotate-keys.sh` para gerar segredos únicos
-- [ ] Verificou que `.env` **NÃO** está versionado no git
-- [ ] Configurou certificados SSL em `loonar/ssl-certs/`
-- [ ] Trocou senha padrão do admin após primeiro login
-- [ ] Configurou firewall no servidor remoto
-
----
-
-**Dúvidas?** Consulte [DEPLOY.md](DEPLOY.md) para documentação completa.
-
+- [ ] Confirmou que `.env` **não** está versionado
+- [ ] Configurou certificados em `loonar/ssl-certs/`
+- [ ] Alterou a senha padrão do usuário admin
+- [ ] Protegeu o host (firewall / regras de acesso)
 
 ---
 
 ## ✅ Validação
 
 ```bash
-# Verificar se tudo está OK
 cd loonar
-./validate.sh
+./validate.sh   # valida arquivos de configuração
 ```
-
----
-
-## 📝 Por que o setup.sh é necessário?
-
-O script `setup.sh`:
-1. Cria estrutura de diretórios para volumes Docker
-2. **Ajusta permissões** para evitar erros "Permission Denied"
-3. Cria configurações nginx padrão
-4. Valida arquivos de configuração
-
-**Você precisa executá-lo apenas UMA VEZ por host.**
 
 ---
 
 ## 🔄 Comandos Úteis
 
 ```bash
-# Ver status
-docker ps
-
-# Ver logs
-docker logs -f superset_app
-docker logs superset_init
-
-# Parar (mantém dados)
-./down.sh
-
-# Parar e remover volumes
-./down.sh -v
-
-# Limpar tudo completamente
-./down.sh -c
-
-# Validar ambiente
-./validate.sh
+docker context ls                  # Listar contextos disponíveis
+docker ps                          # Ver containers ativos
+docker compose -f docker-compose-loonar.yml ps
+docker compose -f docker-compose-loonar.yml logs -f superset_app
+./down.sh && ./up.sh               # Reiniciar rapidamente
 ```
 
 ---
 
-## 🆘 Problemas Comuns
+**Ficou com dúvidas?** Consulte a documentação completa em [DEPLOY.md](DEPLOY.md).
 
 ### Erro: "Permission denied: '/app/superset_home/sqllab'"
 
@@ -249,6 +155,19 @@ ports:
   - 8080:80      # Acesse em http://localhost:8080
   - 8443:443
 ```
+
+### Tela em branco + erros CSP `https://superset/...`
+
+**Solução:**
+
+```bash
+./loonar/up.sh
+# ou
+docker compose --env-file loonar/.env -f docker-compose-loonar.yml restart nginx
+curl -I https://$SUPERSET_HOST/static/appbuilder/css/flags/flags16.css
+```
+
+Após o restart, o `curl` deve retornar 200 sem redirecionar; limpe o cache do navegador e recarregue a UI.
 
 ---
 

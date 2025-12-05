@@ -59,10 +59,9 @@ x-superset-env: &superset-env
     required: false
 
 x-superset-volumes:
-  &superset-volumes # /app/pythonpath_docker will be appended to the PYTHONPATH in the final container
-  - ./docker:/app/docker
+  &superset-volumes # Persistência do superset_home e customizações Loonar
+  - superset_home_data:/app/superset_home
   - ./loonar/pythonpath:/app/pythonpath
-  - ./loonar/volumes/superset_home:/app/superset_home
   - ./loonar/logo:/app/superset/static/assets/images/loonar:ro
 
 x-common-build: &common-build
@@ -74,16 +73,16 @@ x-common-build: &common-build
 services:
 # Use sempre imagens oficiais e tags de versão específicas para produção
   redis:
-    image: redis:7
+    build:
+      context: ./docker/redis
     container_name: superset_cache
     restart: unless-stopped
     user: "999:999"
     env_file: *superset-env
     command: |
-      sh -c 'redis-server /etc/redis/redis.conf --requirepass "$${REDIS_PASSWORD}"'
+      sh -c 'redis-server /usr/local/etc/redis/redis.conf --requirepass "$${REDIS_PASSWORD}"'
     volumes:
-      - ./docker/redis/redis.conf:/etc/redis/redis.conf:ro
-      - ./loonar/volumes/redis:/data
+      - redis_data:/data
     healthcheck:
       test: ["CMD", "sh", "-c", "redis-cli -a $$REDIS_PASSWORD ping || exit 1"]
       interval: 30s
@@ -95,13 +94,13 @@ services:
 
   db:
     env_file: *superset-env
-    # Use sempre imagens oficiais e tags de versão específicas para produção
-    image: postgres:16
+    build:
+      context: .
+      dockerfile: docker/postgres/Dockerfile
     container_name: superset_db
     restart: unless-stopped
     volumes:
-      - ./loonar/volumes/db_home:/var/lib/postgresql/data
-      - ./docker/docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d
+      - db_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 10s
@@ -124,6 +123,9 @@ services:
     container_name: superset_app
     command: ["/app/docker/docker-bootstrap.sh", "app-gunicorn"]
     user: "root"
+    depends_on:
+      superset_init:
+        condition: service_completed_successfully
     volumes: *superset-volumes
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8088/health || exit 1"]
@@ -134,8 +136,32 @@ services:
     networks:
       - superset
 
+  superset_init:
+    env_file: *superset-env
+    build:
+      <<: *common-build
+      network: host
+      extra_hosts:
+        - "host.docker.internal:host-gateway"
+    container_name: superset_init
+    command: ["/app/docker/docker-init.sh"]
+    user: "root"
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes: *superset-volumes
+    networks:
+      - superset
+    healthcheck:
+      disable: true
+
   nginx:
-    image: nginx:1.25-alpine
+    build:
+      context: .
+      dockerfile: docker/nginx/Dockerfile
     container_name: superset_nginx
     restart: unless-stopped
     depends_on:
@@ -147,11 +173,7 @@ services:
       - 443:443
     command: ["/bin/sh", "-c", "envsubst '$$SUPERSET_HOST $$SSL_CERT $$SSL_KEY $$SSL_TRUSTED' < /etc/nginx/templates/superset.conf.template > /etc/nginx/conf.d/superset.conf && nginx -g 'daemon off;'" ]
     volumes:
-      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./docker/nginx/conf.d:/etc/nginx/conf.d:rw
-      - ./docker/nginx/templates:/etc/nginx/templates:ro
-      - ./loonar/ssl-certs:/etc/nginx/certs:ro
-      - ./loonar/volumes/nginx_logs:/var/log/nginx
+      - nginx_logs_data:/var/log/nginx
     # Para produção, configure regras de firewall para expor apenas as portas necessárias
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1/health || exit 1"]
@@ -162,30 +184,10 @@ services:
       - superset
 
 volumes:
-  superset_home:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: ${SUPERSET_VOLUMES_PATH:-${PWD}/loonar/volumes}/superset_home
-  db_home:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: ${SUPERSET_VOLUMES_PATH:-${PWD}/loonar/volumes}/db_home
-  redis:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: ${SUPERSET_VOLUMES_PATH:-${PWD}/loonar/volumes}/redis
-  nginx_logs:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: ${SUPERSET_VOLUMES_PATH:-${PWD}/loonar/volumes}/nginx_logs
+  superset_home_data:
+  db_data:
+  redis_data:
+  nginx_logs_data:
 # =============================
 # VOLUMES: Garanta persistência e proteção dos dados!
 # - Configure backup periódico dos volumes

@@ -6,7 +6,7 @@ Sistema completo de deploy com suporte para instalação **local** ou **remota**
 
 ```bash
 cd loonar
-./deploy.sh    # Script interativo com menu de opções
+./up.sh    # Script interativo com seleção de contexto e redes
 ```
 
 ## 📚 Documentação
@@ -14,26 +14,16 @@ cd loonar
 - **[QUICKSTART.md](QUICKSTART.md)** - Guia rápido com exemplos práticos
 - **[DEPLOY.md](DEPLOY.md)** - Documentação completa e detalhada
 
-## 🎯 Opções de Deploy
-
-| Opção | Descrição | Quando Usar |
-|-------|-----------|-------------|
-| **1. Local** | Deploy na máquina atual | Desenvolvimento, testes |
-| **2. Docker Context** | Deploy remoto via contexto Docker | Servidor com Docker Context configurado |
-| **3. SSH** | Deploy remoto via SSH | Servidor acessível por SSH com chave |
-
 ## 📋 Scripts Disponíveis
 
 ### Scripts Principais
-- **`deploy.sh`** - Script principal com menu interativo
-- **`up.sh`** - Iniciar Superset (local)
+- **`up.sh`** - Script único de deploy (seleciona contexto, redes e executa o compose)
+- **`deploy.sh`** - Alias legado que apenas encaminha para `up.sh`
 - **`down.sh`** - Parar Superset (local)
 - **`rotate-keys.sh`** - Gerar segredos para .env
 
-### Scripts de Setup (chamados automaticamente)
-- `setup-local.sh` - Configuração para deploy local
-- `setup-remote-context.sh` - Configuração para Docker Context
-- `setup-remote-ssh.sh` - Configuração para deploy via SSH
+### Scripts de Setup (legados)
+- `setup-local.sh` e `setup-remote-ssh.sh` continuam disponíveis para cenários avançados, mas o fluxo padrão agora é `up.sh`
 
 ## ⚙️ Arquivos de Configuração
 
@@ -48,15 +38,9 @@ cd loonar
 3. Troque senha do admin após primeiro acesso
 4. Configure firewall adequadamente
 
-## 📊 Estrutura de Volumes
+## 📊 Persistência
 
-```
-volumes/
-├── db_home/        # Banco de dados PostgreSQL
-├── redis/          # Cache Redis
-├── superset_home/  # Dados do Superset
-└── nginx_logs/     # Logs do Nginx
-```
+Os dados persistentes agora usam **volumes gerenciados pelo Docker**, eliminando a necessidade de criar diretórios locais ou remotos manualmente. Basta executar `./up.sh` que o Docker cuidará da criação e do ciclo de vida dos volumes.
 
 ## 🆘 Suporte
 

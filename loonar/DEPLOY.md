@@ -4,15 +4,18 @@ Este guia descreve como fazer o deploy do Superset Loonar em diferentes contexto
 
 ## 📋 Pré-requisitos
 
-### Para todos os cenários:
+### Para todos os cenários
+
 - Docker e Docker Compose instalados
 - Arquivo `.env` configurado (execute `./rotate-keys.sh` se necessário)
 
-### Para deploy remoto via Docker Context:
+### Para deploy remoto via Docker Context
+
 - Docker Context remoto já configurado e testado
 - Acesso ao servidor remoto via Docker API
 
-### Para deploy remoto via SSH:
+### Para deploy remoto via SSH
+
 - Acesso SSH ao servidor remoto via chave SSH (sem senha)
 - Docker e Docker Compose instalados no servidor remoto
 - Permissões adequadas no servidor remoto
@@ -21,14 +24,16 @@ Este guia descreve como fazer o deploy do Superset Loonar em diferentes contexto
 
 ## 🚀 Deploy Rápido
 
-### Passo único para todos os cenários:
+### Passos rápidos
 
 ```bash
 cd loonar
-./deploy.sh
+./rotate-keys.sh   # primeira vez
+./up.sh            # seleciona o contexto Docker e executa o compose
 ```
 
 O script interativo irá:
+
 1. Validar o arquivo `.env`
 2. Apresentar opções de deploy
 3. Executar o setup apropriado baseado na sua escolha
@@ -37,117 +42,28 @@ O script interativo irá:
 
 ## 📝 Cenários de Deploy
 
-### 1️⃣ Deploy Local
+### 1️⃣ Desenvolvimento local
 
-**Quando usar:** Deploy na máquina atual para desenvolvimento ou testes.
+- Execute `./loonar/up.sh` e mantenha o contexto atual (normalmente `default`).
+- O script construirá as imagens, criará os volumes Docker e exibirá o status final.
+- Use `./loonar/down.sh` para parar os serviços quando necessário.
 
-**O que acontece:**
-- Cria volumes localmente em `loonar/volumes/`
-- Configura permissões necessárias
-- Constrói imagens Docker
-- Prepara ambiente para execução local
+### 2️⃣ Deploy remoto via Docker Context
 
-**Execução:**
-```bash
-./deploy.sh
-# Selecione opção 1
-```
+1. Crie o contexto uma única vez:
+   ```bash
+   docker context create producao --docker "host=ssh://user@servidor.com"
+   ```
+2. Execute `./loonar/up.sh` na sua máquina e escolha o contexto `producao` na lista.
+3. O script usará o daemon remoto e os volumes serão criados automaticamente nesse host.
 
-**Após o setup:**
-```bash
-./up.sh          # Iniciar Superset
-./down.sh        # Parar Superset
-```
+### 3️⃣ Execução direta no servidor (SSH)
 
----
+1. Clone o repositório e gere o `.env` no servidor remoto.
+2. Acesse o host via SSH e execute `./loonar/up.sh` diretamente nele.
+3. Essa abordagem continua compatível com `setup-remote-ssh.sh`, mas o fluxo padrão é o mesmo script.
 
-### 2️⃣ Deploy Remoto via Docker Context
-
-**Quando usar:** Você tem um Docker Context configurado apontando para servidor remoto.
-
-**Pré-requisitos:**
-- Docker Context remoto configurado:
-  ```bash
-  docker context create remote --docker "host=ssh://user@servidor"
-  docker context use remote
-  docker ps  # Testar conexão
-  ```
-
-**O que acontece:**
-- Muda para o contexto Docker remoto
-- Cria diretórios no servidor remoto
-- Envia arquivos necessários
-- Constrói imagens no servidor remoto
-- Restaura contexto original ao finalizar
-
-**Execução:**
-```bash
-./deploy.sh
-# Selecione opção 2
-# Informe o nome do contexto Docker (ou use o atual)
-# Informe o diretório no servidor remoto (ex: /opt/superset)
-```
-
-**Após o setup:**
-```bash
-# Mudar para contexto remoto
-docker context use remote
-
-# Iniciar serviços
-cd /opt/superset  # (diretório informado)
-docker compose --env-file=./loonar/.env -f docker-compose-loonar.yml up -d
-
-# Ou voltar ao contexto local e usar comandos remotos
-docker context use default
-```
-
----
-
-### 3️⃣ Deploy Remoto via SSH
-
-**Quando usar:** Deploy direto no servidor via SSH, sem Docker Context configurado.
-
-**Pré-requisitos:**
-- Chave SSH configurada:
-  ```bash
-  ssh user@servidor  # Deve conectar sem pedir senha
-  ```
-- Docker instalado no servidor remoto
-
-**O que acontece:**
-- Valida conexão SSH
-- Valida Docker no servidor remoto
-- Cria tarball com arquivos do projeto
-- Envia via SCP para servidor remoto
-- Extrai arquivos no servidor
-- Configura permissões
-- Constrói imagens Docker no servidor
-- Cria script de gerenciamento (`manage-superset.sh`)
-
-**Execução:**
-```bash
-./deploy.sh
-# Selecione opção 3
-# Informe o host SSH (ex: user@servidor.com)
-# Informe o diretório no servidor remoto (ex: /opt/superset)
-```
-
-**Após o setup - No servidor remoto:**
-
-```bash
-# Conectar ao servidor
-ssh user@servidor
-
-# Navegar para diretório
-cd /opt/superset  # (diretório informado no deploy)
-
-# Gerenciar Superset
-./manage-superset.sh start    # Iniciar
-./manage-superset.sh stop     # Parar
-./manage-superset.sh restart  # Reiniciar
-./manage-superset.sh status   # Ver status
-./manage-superset.sh logs     # Ver logs
-```
+Em todos os cenários os dados persistentes ficam em volumes Docker nomeados, portanto não é necessário preparar diretórios como `loonar/volumes` manualmente.
 
 ---
 
@@ -267,6 +183,28 @@ ssh-add -l
 # Adicionar chave se necessário
 ssh-add ~/.ssh/id_rsa
 ```
+
+### Tela em branco / CSP apontando para `https://superset/...`
+
+Esse sintoma ocorre quando o Nginx ainda não foi recarregado com o template que encaminha o cabeçalho `Host` para os assets estáticos e o Superset responde com redirecionamentos para `https://superset/...`.
+
+1. Recrie o serviço Nginx com o template atualizado:
+
+  ```bash
+  ./loonar/up.sh
+  # ou
+  docker compose --env-file loonar/.env -f docker-compose-loonar.yml restart nginx
+  ```
+
+1. Valide que não há mais redirecionamentos executando:
+
+  ```bash
+  curl -I https://$SUPERSET_HOST/static/appbuilder/css/flags/flags16.css
+  ```
+
+  O comando deve retornar `HTTP/2 200` sem mudar o host.
+
+1. Limpe o cache do navegador (ou abra uma janela anônima) e recarregue a UI.
 
 ---
 

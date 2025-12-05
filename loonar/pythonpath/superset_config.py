@@ -236,3 +236,32 @@ HTTP_HEADERS = {
 
 # Mapbox (if needed)
 MAPBOX_API_KEY = os.environ.get("MAPBOX_API_KEY", "")
+
+# ------------------------------------------------------------------
+# Loonar branding (logos + theming)
+# ------------------------------------------------------------------
+_BRAND_LOGO_BASE = "/static/assets/images/loonar"
+_LIGHT_LOGO_PATH = f"{_BRAND_LOGO_BASE}/logo-light.png"
+_DARK_LOGO_PATH = f"{_BRAND_LOGO_BASE}/logo-dark.png"
+
+APP_NAME = os.environ.get("APP_NAME", "Loonar FinOps")
+APP_ICON = _LIGHT_LOGO_PATH
+LOGO_TOOLTIP = "Loonar FinOps - Powered by Superset"
+
+FAVICONS = [{"href": _LIGHT_LOGO_PATH}]
+
+THEME_DEFAULT: dict[str, Any] = {
+    "token": {
+        "brandLogoUrl": _LIGHT_LOGO_PATH,
+        "brandLogoAlt": "Loonar FinOps",
+        "brandLogoHeight": "40px",
+    }
+}
+
+THEME_DARK: dict[str, Any] = {
+    "token": {
+        "brandLogoUrl": _DARK_LOGO_PATH,
+        "brandLogoAlt": "Loonar FinOps",
+        "brandLogoHeight": "40px",
+    }
+}
