@@ -215,6 +215,10 @@ COPY --from=superset-node /app/superset/static/assets superset/static/assets
 
 # TODO, when the next version comes out, use --exclude superset/translations
 COPY superset superset
+# Copia customizações Python e assets Loonar para dentro da imagem,
+# garantindo funcionamento em contextos remotos
+COPY loonar/pythonpath /app/pythonpath
+COPY loonar/logo superset/static/assets/images/loonar
 # TODO in the meantime, remove the .po files
 RUN rm superset/translations/*/*/*.po
 

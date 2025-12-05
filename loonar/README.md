@@ -1,4 +1,113 @@
-# Superset Loonar - Guia de Instalação
+# Superset Loonar – Guia de Instalação
+
+Este guia foi atualizado para o fluxo unificado baseado no script `loonar/up.sh`, que trata seleção de contexto Docker, persistência com volumes nomeados e execução do `docker compose` sem etapas adicionais.
+
+---
+
+## 📋 Pré-requisitos
+
+- Docker Engine 20.10+ e Docker Compose v2
+- Acesso ao repositório com os fontes do Superset Loonar
+- Arquivo `loonar/.env` configurado (gere com `./loonar/rotate-keys.sh` se ainda não existir)
+- Certificados válidos em `loonar/ssl-certs/` se desejar HTTPS
+
+---
+
+## 🚀 Instalação
+
+### 1. Clonar repositório e criar `.env`
+
+```bash
+git clone <repository-url>
+cd superset/loonar
+./rotate-keys.sh   # cria/atualiza loonar/.env com segredos fortes
+```
+
+### 2. Executar `up.sh`
+
+```bash
+./up.sh
+```
+
+O script irá:
+
+1. Validar se o Docker está acessível e se o `.env` existe.
+2. Listar os contextos Docker configurados (`docker context ls`).
+3. Permitir que você escolha o contexto alvo ou mantenha o atual.
+4. Detectar se o `docker-compose-loonar.yml` define redes. Se não definir, perguntará qual rede utilizar ou criará uma nova.
+5. Executar `docker compose --env-file loonar/.env -f docker-compose-loonar.yml up -d --build --remove-orphans` no contexto escolhido.
+
+Todos os diretórios de dados (Superset, Postgres, Redis, logs do Nginx) agora são **volumes Docker nomeados** (`superset_home_data`, `db_data`, `redis_data`, `nginx_logs_data`). Assim não é necessário preparar pastas locais nem ajustar permissões manualmente.
+
+### 3. Acompanhar a inicialização
+
+```bash
+docker compose \
+  --env-file loonar/.env \
+  -f docker-compose-loonar.yml logs -f superset_app
+```
+
+### 4. Acessar a interface
+
+- URL base: `http://<SUPERSET_HOST>` (configure no `.env`)
+- Usuário padrão: `admin`
+- Senha padrão: `admin` (troque imediatamente após o primeiro login)
+
+Para encerrar os serviços:
+
+```bash
+./down.sh            # para os containers
+./down.sh -v         # remove também os volumes Docker nomeados
+```
+
+---
+
+## 🧭 Cenários
+
+| Cenário | Como proceder |
+| --- | --- |
+| Desenvolvimento local | Execute `./up.sh`, mantenha o contexto `default` e acesse via `http://localhost:8088`. |
+| Servidor remoto (Docker Context) | Crie um contexto (`docker context create producao ...`) e escolha-o quando o script listar as opções. O build e os volumes serão criados diretamente no daemon remoto. |
+| Execução direta no host remoto | Conecte-se via SSH, navegue até `superset/loonar` e execute `./up.sh` no próprio servidor. |
+
+---
+
+## 🐛 Troubleshooting
+
+| Problema | Ação sugerida |
+| --- | --- |
+| `arquivo .env não encontrado` | Execute `./loonar/rotate-keys.sh`. |
+| Contexto não listado | Verifique com `docker context ls` e crie/o atualize conforme necessário. |
+| Portas 80/443 ocupadas | Edite `docker-compose-loonar.yml` no serviço `nginx` para ajustar o `ports`. |
+| UI em branco + erros CSP para `https://superset/...` | Recrie o `nginx` com o template novo executando `./loonar/up.sh` (ou `docker compose --env-file loonar/.env -f docker-compose-loonar.yml restart nginx`). Valide com `curl -I https://$SUPERSET_HOST/static/appbuilder/css/flags/flags16.css` — o retorno deve ser 200 sem redirecionar; depois limpe o cache do navegador. |
+| Reset completo dos dados | Rode `./down.sh -v` e depois `./up.sh` para recriar volumes limpos. |
+
+---
+
+## 🔐 Boas práticas
+
+- Não versione `loonar/.env`.
+- Gere segredos únicos sempre que mover para um novo ambiente (`rotate-keys.sh`).
+- Configure certificados TLS válidos em produção.
+- Restrinja o acesso aos contextos Docker remotos (SSH com chave, VPN, etc.).
+- Altere a senha padrão do usuário `admin` assim que possível.
+
+---
+
+## 📚 Arquivos importantes
+
+- `loonar/up.sh` – script interativo de deploy
+- `loonar/down.sh` – encerra serviços
+- `loonar/rotate-keys.sh` – gera segredos e `.env`
+- `docker-compose-loonar.yml` – definição dos serviços e volumes nomeados
+- `loonar/README-DEPLOY.md` / `loonar/QUICKSTART.md` – documentação adicional
+
+---
+
+## 📞 Suporte adicional
+
+- Documentação oficial do Superset: <https://superset.apache.org/docs/>
+- Guia completo de deploy: [`DEPLOY.md`](DEPLOY.md)# Superset Loonar - Guia de Instalação
 
 Este guia descreve como implantar o Apache Superset com configurações Loonar em um host novo, evitando problemas comuns de permissões.
 
@@ -19,20 +128,16 @@ git clone <repository-url>
 cd superset
 ```
 
-### 2. Execute o Script de Setup
+### 2. Execute o Script de Deploy
 
-O script `loonar/setup.sh` irá:
-- Criar estrutura de diretórios de volumes
-- Configurar permissões adequadas
-- Criar configurações nginx padrão
-- Validar arquivos de configuração necessários
+O novo fluxo está concentrado em `loonar/up.sh`, que seleciona o contexto Docker, cria redes/volumes quando necessário e executa o `docker compose up`.
 
 ```bash
 cd loonar
-./setup.sh
+./up.sh
 ```
 
-**IMPORTANTE:** O script solicita `sudo` apenas para ajustar ownership dos volumes. Isso é necessário **UMA VEZ** na instalação inicial.
+Os dados persistentes são criados automaticamente como **volumes Docker nomeados**, dispensando `sudo` e criação manual de diretórios.
 
 ### 3. Configure Variáveis de Ambiente
 
@@ -65,26 +170,12 @@ ADMIN_PASSWORD=admin
 openssl rand -base64 42
 ```
 
-### 4. Inicie os Containers
+### 4. Acompanhe a Inicialização
+
+Use o próprio assistente do `up.sh` ou rode manualmente:
 
 ```bash
-cd ..  # volta para raiz do projeto
-docker compose -f docker-compose-loonar.yml up -d
-```
-
-### 5. Acompanhe a Inicialização
-
-```bash
-# Ver logs da inicialização
-docker logs -f superset_init
-
-# Verificar status dos containers
-docker ps -a
-```
-
-Aguarde a mensagem:
-```
-Init Step 3/3 [Complete] -- Setting up roles and perms
+docker compose --env-file loonar/.env -f docker-compose-loonar.yml logs -f superset_app
 ```
 
 ### 6. Acesse o Superset
@@ -101,78 +192,20 @@ Abra seu navegador em:
 
 ## 🔧 Resolução de Problemas
 
-### Erro: Permission Denied em /app/superset_home
+### Logs e troubleshooting
 
-**Sintoma:**
-```
-PermissionError: [Errno 13] Permission denied: '/app/superset_home/sqllab'
-```
+- `docker compose --env-file loonar/.env -f docker-compose-loonar.yml ps`
+- `docker compose --env-file loonar/.env -f docker-compose-loonar.yml logs -f superset_app`
 
-**Solução:**
+Se precisar reiniciar ou limpar dados:
+
 ```bash
-cd loonar
-./setup.sh  # Re-executa configuração de permissões
+./loonar/down.sh        # Para os serviços
+./loonar/down.sh -v     # Remove volumes Docker nomeados
+./loonar/up.sh          # Recria tudo
 ```
 
-### Erro: Database Connection Failed
-
-**Sintoma:**
-```
-connection to server at "db" (172.18.0.2), port 5432 failed
-```
-
-**Possíveis causas:**
-
-1. **Volumes com permissões incorretas:**
-   ```bash
-   docker compose -f docker-compose-loonar.yml down -v
-   sudo rm -rf loonar/volumes/db_home/*
-   cd loonar && ./setup.sh
-   docker compose -f docker-compose-loonar.yml up -d
-   ```
-
-2. **Container PostgreSQL não inicializou:**
-   ```bash
-   docker logs superset_db
-   ```
-
-### Container superset_init fica reiniciando
-
-**Verificar logs:**
-```bash
-docker logs superset_init --tail 100
-```
-
-**Reset completo:**
-```bash
-# Parar tudo
-docker compose -f docker-compose-loonar.yml down -v
-
-# Limpar volumes
-sudo rm -rf loonar/volumes/db_home/*
-sudo rm -rf loonar/volumes/redis/*
-sudo rm -rf loonar/volumes/superset_home/*
-
-# Re-setup
-cd loonar && ./setup.sh
-
-# Iniciar novamente
-cd .. && docker compose -f docker-compose-loonar.yml up -d
-```
-
-## 📁 Estrutura de Volumes
-
-```
-loonar/volumes/
-├── superset_home/     # Uploads, cache, configurações
-├── db_home/          # Dados PostgreSQL
-└── redis/            # Dados Redis/cache
-```
-
-**IMPORTANTE para Produção:**
-- Configure backup periódico desses volumes
-- Use volumes Docker nomeados ou storage externo
-- Proteja dados sensíveis com criptografia
+Como os volumes são gerenciados pelo Docker, não é necessário remover diretórios manualmente. Use `docker volume ls` para inspecionar ou `docker volume rm <nome>` para limpeza manual.
 
 ## 🔒 Checklist de Segurança para Produção
 

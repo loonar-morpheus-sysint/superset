@@ -1,47 +1,10 @@
 #!/usr/bin/bash
-#
-# Script principal de deploy do Superset Loonar
-# Permite escolher entre instalação local ou remota
-#
 
-set -e
+# Script legado mantido por compatibilidade.
+# Todo o fluxo de deploy foi incorporado ao up.sh.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-
-# ============================================================================
-# CORES E ESTILOS
-# ============================================================================
-
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-CYAN='\033[0;36m'
-MAGENTA='\033[0;35m'
-NC='\033[0m' # No Color
-
-# ============================================================================
-# FUNÇÕES AUXILIARES
-# ============================================================================
-
-print_header() {
-    echo -e "${CYAN}╔════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║${NC} $1"
-    echo -e "${CYAN}╚════════════════════════════════════════════════════════╝${NC}"
-}
-
-print_info() {
-    echo -e "${BLUE}ℹ️  $1${NC}"
-}
-
-print_success() {
-    echo -e "${GREEN}✅ $1${NC}"
-}
-
-print_warning() {
-    echo -e "${YELLOW}⚠️  $1${NC}"
-}
+exec "$SCRIPT_DIR/up.sh"
 
 print_error() {
     echo -e "${RED}❌ $1${NC}"
