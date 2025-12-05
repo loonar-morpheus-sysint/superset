@@ -33,7 +33,7 @@ Uso: $SCRIPT_NAME --ad_dn_base "<OU=...,DC=...,DC=...>" --ad_cn_term "<termo>"
                   [--debug] [--show_log]
 
 Parâmetros:
-  --ad_dn_base             Base DN no Active Directory (ex: OU=04-CLIENTES,DC=sondadc,DC=local)
+  --ad_dn_base             Base DN no Active Directory (ex: OU=04-CLIENTES,DC=yourcompany,DC=local)
   --ad_cn_term             Termo obrigatório no CN do grupo (alias: --ad_cn_hasterm)
   --asf_role_base          Role do Superset usada como modelo de permissões
   --ad_svc_user            DN completo do usuário de serviço
