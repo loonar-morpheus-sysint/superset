@@ -125,7 +125,7 @@ Loonar FinOps /static/assets/images/loonar/logo-light.png
    - Firefox: `Ctrl + Shift + Delete` → Marcar "Cache" → Limpar
 
 2. **Acessar a aplicação**:
-   - URL: https://finops-hom.sondahybrid.com
+   - URL: https://your.domain.com
    - Fazer login
 
 3. **Verificar os logos**:

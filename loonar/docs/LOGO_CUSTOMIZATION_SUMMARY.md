@@ -82,22 +82,22 @@ Todos os recursos estão acessíveis com status HTTP 200:
 
 ```bash
 # Arquivos estáticos JavaScript
-curl -I https://finops-hom.sondahybrid.com/static/assets/theme.*.entry.js
+curl -I https://your.domain.com/static/assets/theme.*.entry.js
 # → 200 OK, content-type: application/javascript
 
 # Arquivos CSS
-curl -I https://finops-hom.sondahybrid.com/static/appbuilder/css/flags/flags16.css
+curl -I https://your.domain.com/static/appbuilder/css/flags/flags16.css
 # → 200 OK, content-type: text/css
 
 # Logos customizados
-curl -I https://finops-hom.sondahybrid.com/static/assets/images/loonar/logo-light.png
+curl -I https://your.domain.com/static/assets/images/loonar/logo-light.png
 # → 200 OK, content-type: image/png, 12949 bytes
 
-curl -I https://finops-hom.sondahybrid.com/static/assets/images/loonar/logo-dark.png
+curl -I https://your.domain.com/static/assets/images/loonar/logo-dark.png
 # → 200 OK, content-type: image/png, 12949 bytes
 
 # Imagens padrão
-curl -I https://finops-hom.sondahybrid.com/static/assets/images/loading.gif
+curl -I https://your.domain.com/static/assets/images/loading.gif
 # → 200 OK, content-type: image/gif
 ```
 
@@ -118,7 +118,7 @@ Ctrl + Shift + P (Firefox)
 
 ### 2. Acessar a Aplicação
 
-URL: <https://finops-hom.sondahybrid.com>
+URL: <https://your.domain.com>
 
 ### 3. Verificações Visuais
 
@@ -170,7 +170,7 @@ Se aparecerem violações de CSP:
 1. Verificar headers Nginx:
 
    ```bash
-   curl -I https://finops-hom.sondahybrid.com | grep -i content-security
+   curl -I https://your.domain.com | grep -i content-security
    ```
 
 2. Verificar logs do Superset:

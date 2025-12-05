@@ -23,7 +23,7 @@ cd loonar
 ./up.sh
 # selecione o contexto "default" (ou pressione Enter para manter o atual)
 
-# Acesse em: http://localhost:8088 ou http://finops-hom.sondahybrid.com
+# Acesse em: http://localhost:8088 ou http://your.domain.com
 # Login padrão: admin / admin (troque após o primeiro acesso)
 ```
 

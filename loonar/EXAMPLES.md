@@ -55,7 +55,7 @@ cd loonar
 ./up.sh
 
 # 6. Acessar
-# Abrir navegador em: http://finops-hom.sondahybrid.com
+# Abrir navegador em: http://localhost
 # Login: admin / admin
 
 # 7. Gerenciar
