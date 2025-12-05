@@ -51,9 +51,11 @@ O script interativo irá:
 ### 2️⃣ Deploy remoto via Docker Context
 
 1. Crie o contexto uma única vez:
+
    ```bash
    docker context create producao --docker "host=ssh://user@servidor.com"
    ```
+
 2. Execute `./loonar/up.sh` na sua máquina e escolha o contexto `producao` na lista.
 3. O script usará o daemon remoto e os volumes serão criados automaticamente nesse host.
 
@@ -90,10 +92,12 @@ REDIS_PASSWORD=<gerado-por-rotate-keys.sh>
 ### Certificados SSL
 
 Para produção, coloque certificados em:
-```
+
+```text
 loonar/ssl-certs/
   ├── fullchain.pem
   └── privkey.pem
+  └── ca-bundle.crt
 ```
 
 Se não tiver certificados, o setup continuará mas sem HTTPS (não recomendado para produção).
@@ -102,8 +106,9 @@ Se não tiver certificados, o setup continuará mas sem HTTPS (não recomendado 
 
 ## 📂 Estrutura de Diretórios
 
-### Local:
-```
+### Local
+
+```text
 superset/
 ├── loonar/
 │   ├── deploy.sh              # ← Script principal
@@ -122,8 +127,9 @@ superset/
 └── docker-compose-loonar.yml
 ```
 
-### Remoto (após deploy via SSH):
-```
+### Remoto (após deploy via SSH)
+
+```text
 /opt/superset/                 # (ou diretório escolhido)
 ├── loonar/
 │   ├── volumes/               # Dados persistentes (remoto)
@@ -139,18 +145,21 @@ superset/
 ## 🔍 Troubleshooting
 
 ### Erro: "Arquivo .env não encontrado"
+
 ```bash
 cd loonar
 ./rotate-keys.sh  # Gera .env com segredos
 ```
 
 ### Erro: "Missing required variable"
+
 ```bash
 # Edite loonar/.env e preencha as variáveis necessárias
 vim loonar/.env
 ```
 
 ### Erro de permissão em volumes
+
 ```bash
 # Local
 sudo chown -R 999:999 loonar/volumes/{db_home,redis}
@@ -160,6 +169,7 @@ ssh user@servidor "sudo chown -R 999:999 /opt/superset/loonar/volumes/{db_home,r
 ```
 
 ### Contexto Docker não encontrado
+
 ```bash
 # Listar contextos
 docker context ls
@@ -173,6 +183,7 @@ docker ps
 ```
 
 ### Erro ao conectar via SSH
+
 ```bash
 # Testar conexão
 ssh user@servidor
