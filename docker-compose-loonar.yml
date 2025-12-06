@@ -136,6 +136,52 @@ services:
     networks:
       - superset
 
+  superset_worker:
+    env_file: *superset-env
+    build:
+      <<: *common-build
+      network: host
+      extra_hosts:
+        - "host.docker.internal:host-gateway"
+    container_name: superset_worker
+    command: ["/app/docker/docker-bootstrap.sh", "worker"]
+    user: "root"
+    restart: unless-stopped
+    depends_on:
+      superset_init:
+        condition: service_completed_successfully
+    environment:
+      CELERYD_CONCURRENCY: 2
+    volumes: *superset-volumes
+    healthcheck:
+      test:
+        ["CMD-SHELL", "celery -A superset.tasks.celery_app:app inspect ping -d celery@$${HOSTNAME}"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - superset
+
+  superset_worker_beat:
+    env_file: *superset-env
+    build:
+      <<: *common-build
+      network: host
+      extra_hosts:
+        - "host.docker.internal:host-gateway"
+    container_name: superset_worker_beat
+    command: ["/app/docker/docker-bootstrap.sh", "beat"]
+    user: "root"
+    restart: unless-stopped
+    depends_on:
+      - superset_worker
+    volumes: *superset-volumes
+    networks:
+      - superset
+    healthcheck:
+      disable: true
+
   superset_init:
     env_file: *superset-env
     build:

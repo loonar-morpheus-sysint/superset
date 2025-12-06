@@ -8,6 +8,7 @@ Este guia descreve como fazer o deploy do Superset Loonar em diferentes contexto
 
 - Docker e Docker Compose instalados
 - Arquivo `.env` configurado (execute `./rotate-keys.sh` se necessário)
+- Host Linux com `vm.overcommit_memory=1` (obrigatório para o Redis `superset_cache`)
 
 ### Para deploy remoto via Docker Context
 
@@ -70,6 +71,25 @@ Em todos os cenários os dados persistentes ficam em volumes Docker nomeados, po
 ---
 
 ## 🔧 Configuração Avançada
+
+### Ajuste obrigatório do kernel (Redis)
+
+O serviço `superset_cache` (Redis) precisa que o kernel do host esteja com `vm.overcommit_memory=1`. Como esse parâmetro **não é namespaced**, o Docker ou o `docker-compose` não conseguem defini-lo automaticamente dentro do container.
+
+1. Verifique o valor atual:
+
+  ```bash
+  sysctl vm.overcommit_memory
+  ```
+
+2. Caso não seja `1`, ajuste no host que executa o Superset:
+
+  - **Aplicação imediata:** `sudo sysctl -w vm.overcommit_memory=1`
+  - **Persistência após reboot:** adicione `vm.overcommit_memory = 1` em `/etc/sysctl.conf` e aplique com `sudo sysctl -p`
+
+3. Para ambientes com múltiplos hosts (por exemplo, Docker Context remoto ou SSH), repita o processo em cada nó antes de rodar `./up.sh`.
+
+Depois da alteração reinicie apenas o serviço Redis (`docker compose restart superset_cache`) ou toda a stack para que o aviso desapareça.
 
 ### Variáveis de Ambiente Importantes
 
