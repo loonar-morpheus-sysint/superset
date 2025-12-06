@@ -31,6 +31,21 @@ cd loonar
 - **`.env-sample`** - Template de configurações
 - **`docker-compose-loonar.yml`** - Definição dos serviços
 
+## 🧠 Requisito do Host
+
+O Redis (`superset_cache`) exige que o host Linux esteja com `vm.overcommit_memory=1`. Esse ajuste **não** pode ser feito pelo `docker-compose`, pois é um parâmetro global do kernel. Antes de executar `./up.sh`, valide com:
+
+```bash
+sysctl vm.overcommit_memory
+```
+
+Se o valor não for `1`, execute:
+
+- Aplicar imediatamente: `sudo sysctl -w vm.overcommit_memory=1`
+- Tornar permanente: adicione `vm.overcommit_memory = 1` em `/etc/sysctl.conf` e rode `sudo sysctl -p`
+
+Repita o procedimento em todos os hosts (locais ou remotos) onde o stack do Superset for executado.
+
 ## 🔐 Segurança
 
 1. Gere segredos únicos: `./rotate-keys.sh`
