@@ -219,12 +219,20 @@ check_superset_initialization() {
         echo "🔄 Executando superset_init com profile init..."
         docker compose "${COMPOSE_ARGS[@]}" --profile init up -d superset_init
 
+        # Capturar o container criado para conseguir ler o exit code depois
+        init_container_id=$(docker compose "${COMPOSE_ARGS[@]}" ps -q superset_init | head -n1)
+        if [ -z "$init_container_id" ]; then
+            echo "❌ Não foi possível identificar o container superset_init"
+            exit 1
+        fi
+
         # Aguardar conclusão
         echo "⏳ Aguardando inicialização do banco de dados..."
-        docker compose "${COMPOSE_ARGS[@]}" logs -f superset_init
+        docker logs -f "$init_container_id"
 
-        # Verificar se foi bem-sucedido
-        if docker compose "${COMPOSE_ARGS[@]}" ps superset_init 2>/dev/null | grep -q "Exited (0)"; then
+        # Verificar exit code real via docker wait no container capturado
+        exit_code=$(docker wait "$init_container_id" || true)
+        if [ "$exit_code" = "0" ]; then
             echo "✅ Superset inicializado com sucesso!"
 
             # Remover container de inicialização
@@ -234,7 +242,7 @@ check_superset_initialization() {
             # Marcar como inicializado
             touch "$init_marker"
         else
-            echo "❌ Erro na inicialização do Superset"
+            echo "❌ Erro na inicialização do Superset (exit code $exit_code)"
             exit 1
         fi
     else
@@ -294,8 +302,14 @@ select_context
 select_build_mode
 select_ldap_mode
 
-COMPOSE_ARGS=(--env-file "$ENV_FILE" -f "$COMPOSE_FILE")
+COMPOSE_ARGS=(--env-file "$ENV_FILE" -f "$COMPOSE_FILE" --profile init)
 TEMP_FILE=""
+
+# Rebuild images upfront when requested to ensure init uses fresh code
+if [ "$BUILD_MODE" = "rebuild" ]; then
+    echo "🔨 Rebuilding Docker images..."
+    docker compose "${COMPOSE_ARGS[@]}" --profile init build
+fi
 
 # Inicializar estrutura do banco de dados se necessário (apenas na primeira vez)
 check_superset_initialization

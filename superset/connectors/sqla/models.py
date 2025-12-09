@@ -68,7 +68,6 @@ from sqlalchemy.sql.expression import Label
 from sqlalchemy.sql.selectable import Alias, TableClause
 from sqlalchemy.types import JSON
 
-from superset import db, is_feature_enabled, security_manager
 from superset.commands.dataset.exceptions import DatasetNotFoundError
 from superset.common.db_query_status import QueryStatus
 from superset.connectors.sqla.utils import (
@@ -87,6 +86,7 @@ from superset.exceptions import (
     SupersetSecurityException,
     SupersetSyntaxErrorException,
 )
+from superset.extensions import db, feature_flag_manager, security_manager
 from superset.jinja_context import (
     BaseTemplateProcessor,
     ExtraCache,
@@ -677,7 +677,7 @@ class BaseDatasource(AuditMixinNullable, ImportExportMixin):  # pylint: disable=
                 else:
                     all_filters.append(clause)
 
-            if is_feature_enabled("EMBEDDED_SUPERSET"):
+            if feature_flag_manager.is_feature_enabled("EMBEDDED_SUPERSET"):
                 for rule in security_manager.get_guest_rls_filters(self):
                     clause = self.text(
                         f"({template_processor.process_template(rule['clause'])})"

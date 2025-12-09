@@ -19,7 +19,6 @@ from typing import Any
 
 from flask import current_app as app
 
-from superset.commands.base import BaseCommand
 from superset.daos.theme import ThemeDAO
 from superset.extensions import db
 from superset.models.core import Theme
@@ -29,7 +28,7 @@ from superset.utils.decorators import transaction
 logger = logging.getLogger(__name__)
 
 
-class SeedSystemThemesCommand(BaseCommand):
+class SeedSystemThemesCommand:
     """Command to seed system themes from configuration."""
 
     def run(self) -> None:
@@ -104,5 +103,5 @@ class SeedSystemThemesCommand(BaseCommand):
             logger.debug(f"Created system theme: {theme_name}")
 
     def validate(self) -> None:
-        """Validate that the command can be executed."""
-        pass
+        """No-op validation for compatibility."""
+        return None

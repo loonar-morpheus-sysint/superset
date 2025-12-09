@@ -22,7 +22,6 @@ from typing import Any, Optional, TYPE_CHECKING
 from flask import g
 from flask_appbuilder.security.sqla.models import Role, User
 
-from superset import security_manager
 from superset.commands.exceptions import (
     DatasourceNotFoundValidationError,
     OwnersNotFoundValidationError,
@@ -33,6 +32,7 @@ from superset.commands.exceptions import (
 from superset.daos.datasource import DatasourceDAO
 from superset.daos.exceptions import DatasourceNotFound
 from superset.daos.tag import TagDAO
+from superset.extensions import security_manager
 from superset.tags.models import ObjectType, Tag, TagType
 from superset.utils import json
 from superset.utils.core import DatasourceType, get_user_id

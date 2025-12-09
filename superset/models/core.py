@@ -61,15 +61,17 @@ from sqlalchemy.pool import NullPool
 from sqlalchemy.schema import UniqueConstraint
 from sqlalchemy.sql import ColumnElement, expression, Select
 
-from superset import db, db_engine_specs, is_feature_enabled
+from superset import db_engine_specs
 from superset.commands.database.exceptions import DatabaseInvalidError
 from superset.constants import LRU_CACHE_MAX_SIZE, PASSWORD_MASK
 from superset.databases.utils import make_url_safe
 from superset.db_engine_specs.base import MetricType, TimeGrain
 from superset.extensions import (
     cache_manager,
+    db,
     encrypted_field_factory,
     event_logger,
+    feature_flag_manager,
     security_manager,
     ssh_manager_factory,
 )
@@ -505,7 +507,9 @@ class Database(Model, AuditMixinNullable, ImportExportMixin):  # pylint: disable
         )
 
         effective_username = self.get_effective_user(sqlalchemy_url)
-        if effective_username and is_feature_enabled("IMPERSONATE_WITH_EMAIL_PREFIX"):
+        if effective_username and feature_flag_manager.is_feature_enabled(
+            "IMPERSONATE_WITH_EMAIL_PREFIX"
+        ):
             user = security_manager.find_user(username=effective_username)
             if user and user.email:
                 effective_username = user.email.split("@")[0]
@@ -754,7 +758,7 @@ class Database(Model, AuditMixinNullable, ImportExportMixin):  # pylint: disable
 
         # for nwo we only optimize queries on virtual datasources, since the only
         # optimization available is predicate pushdown
-        if is_feature_enabled("OPTIMIZE_SQL") and is_virtual:
+        if feature_flag_manager.is_feature_enabled("OPTIMIZE_SQL") and is_virtual:
             script = SQLScript(sql, self.db_engine_spec.engine).optimize()
             sql = script.format()
 
