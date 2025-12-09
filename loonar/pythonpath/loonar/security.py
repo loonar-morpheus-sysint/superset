@@ -260,11 +260,9 @@ class LoonarSecurityManager(SupersetSecurityManager):
 
     def _cleanup_duplicate_views(self) -> None:
         """Remove duplicate views from appbuilder."""
-        for view in list(self.appbuilder.baseviews):
-            if isinstance(view, self.rolemodelview.__class__) and getattr(
-                view, "route_base", None
-            ) in ["/roles", "/users", "/groups", "registrations"]:
-                self.appbuilder.baseviews.remove(view)
+        # Removed: This was incorrectly removing views including RoleRestAPI
+        # The cleanup is not needed as Flask-AppBuilder handles duplicate routes
+        pass
 
     def _cleanup_security_menu(self) -> None:
         """Clean up security menu items."""
