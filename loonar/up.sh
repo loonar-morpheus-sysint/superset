@@ -6,6 +6,8 @@
 # - Funciona com contextos locais ou remotos
 # - Cria ou reutiliza redes apenas quando o compose não define nenhuma
 
+clear
+
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
