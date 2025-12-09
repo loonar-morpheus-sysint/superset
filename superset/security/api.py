@@ -35,6 +35,7 @@ from superset.commands.exceptions import ForbiddenError
 from superset.exceptions import SupersetGenericErrorException
 from superset.extensions import db, event_logger
 from superset.security.guest_token import GuestTokenResourceType
+from superset.utils.decorators import transaction
 from superset.views.base_api import (
     BaseSupersetApi,
     BaseSupersetModelRestApi,
@@ -423,6 +424,309 @@ class RoleRestAPI(BaseSupersetApi):
         except ForbiddenError as e:
             return self.response_403(message=str(e))
         except Exception as e:
+            return self.response_500(message=str(e))
+
+    @expose("/", methods=["POST"])
+    @event_logger.log_this
+    @protect()
+    @safe
+    @statsd_metrics
+    @permission_name("create")
+    @transaction()
+    def post(
+        self,
+    ) -> Response:
+        """Create a new role.
+        ---
+        post:
+          summary: Create a new role
+          requestBody:
+            required: true
+            content:
+              application/json:
+                schema:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+          responses:
+            201:
+              description: Role created successfully
+              content:
+                application/json:
+                  schema:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                      name:
+                        type: string
+            400:
+              $ref: '#/components/responses/400'
+            500:
+              $ref: '#/components/responses/500'
+        """
+        try:
+            data = request.json
+            role_name = data.get("name")
+
+            if not role_name:
+                return self.response_400(message="Role name is required")
+
+            # Check if role already exists
+            existing_role = db.session.query(Role).filter_by(name=role_name).first()
+            if existing_role:
+                return self.response_400(message=f"Role '{role_name}' already exists")
+
+            # Create new role
+            new_role = Role(name=role_name)
+            db.session.add(new_role)
+            db.session.flush()
+
+            return self.response(201, id=new_role.id, name=new_role.name)
+        except Exception as e:
+            logger.exception("Error creating role")
+            return self.response_500(message=str(e))
+
+    @expose("/<int:role_id>", methods=["PUT"])
+    @event_logger.log_this
+    @protect()
+    @safe
+    @statsd_metrics
+    @permission_name("write")
+    @transaction()
+    def put(self, role_id: int) -> Response:
+        """Update a role's name.
+        ---
+        put:
+          summary: Update a role
+          parameters:
+            - in: path
+              name: role_id
+              schema:
+                type: integer
+          requestBody:
+            required: true
+            content:
+              application/json:
+                schema:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+          responses:
+            200:
+              description: Role updated successfully
+            404:
+              $ref: '#/components/responses/404'
+            500:
+              $ref: '#/components/responses/500'
+        """
+        try:
+            role = db.session.query(Role).filter_by(id=role_id).first()
+            if not role:
+                return self.response_404()
+
+            data = request.json
+            new_name = data.get("name")
+
+            if new_name:
+                # Check if another role with this name exists
+                existing = (
+                    db.session.query(Role)
+                    .filter(Role.name == new_name, Role.id != role_id)
+                    .first()
+                )
+                if existing:
+                    return self.response_400(
+                        message=f"Role '{new_name}' already exists"
+                    )
+
+                role.name = new_name
+
+            return self.response(200, message="Role updated successfully")
+        except Exception as e:
+            logger.exception("Error updating role")
+            return self.response_500(message=str(e))
+
+    @expose("/<int:role_id>/permissions", methods=["POST"])
+    @event_logger.log_this
+    @protect()
+    @safe
+    @statsd_metrics
+    @permission_name("write")
+    @transaction()
+    def update_permissions(self, role_id: int) -> Response:
+        """Update role permissions.
+        ---
+        post:
+          summary: Update role permissions
+          parameters:
+            - in: path
+              name: role_id
+              schema:
+                type: integer
+          requestBody:
+            required: true
+            content:
+              application/json:
+                schema:
+                  type: object
+                  properties:
+                    permission_view_menu_ids:
+                      type: array
+                      items:
+                        type: integer
+          responses:
+            200:
+              description: Permissions updated successfully
+            404:
+              $ref: '#/components/responses/404'
+            500:
+              $ref: '#/components/responses/500'
+        """
+        try:
+            from flask_appbuilder.security.sqla.models import PermissionView
+
+            role = db.session.query(Role).filter_by(id=role_id).first()
+            if not role:
+                return self.response_404()
+
+            data = request.json
+            permission_ids = data.get("permission_view_menu_ids", [])
+
+            # Get the permission objects
+            permissions = (
+                db.session.query(PermissionView)
+                .filter(PermissionView.id.in_(permission_ids))
+                .all()
+            )
+
+            role.permissions = permissions
+
+            return self.response(200, message="Permissions updated successfully")
+        except Exception as e:
+            logger.exception("Error updating role permissions")
+            return self.response_500(message=str(e))
+
+    @expose("/<int:role_id>/users", methods=["PUT"])
+    @event_logger.log_this
+    @protect()
+    @safe
+    @statsd_metrics
+    @permission_name("write")
+    @transaction()
+    def update_users(self, role_id: int) -> Response:
+        """Update role users.
+        ---
+        put:
+          summary: Update role users
+          parameters:
+            - in: path
+              name: role_id
+              schema:
+                type: integer
+          requestBody:
+            required: true
+            content:
+              application/json:
+                schema:
+                  type: object
+                  properties:
+                    user_ids:
+                      type: array
+                      items:
+                        type: integer
+          responses:
+            200:
+              description: Users updated successfully
+            404:
+              $ref: '#/components/responses/404'
+            500:
+              $ref: '#/components/responses/500'
+        """
+        try:
+            from flask_appbuilder.security.sqla.models import User
+
+            role = db.session.query(Role).filter_by(id=role_id).first()
+            if not role:
+                return self.response_404()
+
+            data = request.json
+            user_ids = data.get("user_ids", [])
+
+            # Get the user objects
+            users = db.session.query(User).filter(User.id.in_(user_ids)).all()
+
+            # Update users' roles
+            for user in users:
+                if role not in user.roles:
+                    user.roles.append(role)
+
+            # Remove role from users not in the list
+            for user in role.user:
+                if user.id not in user_ids:
+                    user.roles.remove(role)
+
+            return self.response(200, message="Users updated successfully")
+        except Exception as e:
+            logger.exception("Error updating role users")
+            return self.response_500(message=str(e))
+
+    @expose("/<int:role_id>/groups", methods=["PUT"])
+    @event_logger.log_this
+    @protect()
+    @safe
+    @statsd_metrics
+    @permission_name("write")
+    @transaction()
+    def update_groups(self, role_id: int) -> Response:
+        """Update role groups.
+        ---
+        put:
+          summary: Update role groups
+          parameters:
+            - in: path
+              name: role_id
+              schema:
+                type: integer
+          requestBody:
+            required: true
+            content:
+              application/json:
+                schema:
+                  type: object
+                  properties:
+                    group_ids:
+                      type: array
+                      items:
+                        type: integer
+          responses:
+            200:
+              description: Groups updated successfully
+            404:
+              $ref: '#/components/responses/404'
+            500:
+              $ref: '#/components/responses/500'
+        """
+        try:
+            from flask_appbuilder.security.sqla.models import Group
+
+            role = db.session.query(Role).filter_by(id=role_id).first()
+            if not role:
+                return self.response_404()
+
+            data = request.json
+            group_ids = data.get("group_ids", [])
+
+            # Get the group objects
+            groups = db.session.query(Group).filter(Group.id.in_(group_ids)).all()
+
+            role.groups = groups
+
+            return self.response(200, message="Groups updated successfully")
+        except Exception as e:
+            logger.exception("Error updating role groups")
             return self.response_500(message=str(e))
 
 
