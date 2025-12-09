@@ -141,3 +141,5 @@ loonar/volumes
 
 volumes/
 /loonar/ad-user.txt
+
+*.log
