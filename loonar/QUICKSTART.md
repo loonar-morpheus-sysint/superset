@@ -10,6 +10,7 @@ cd loonar
 # 2. Executar o deploy interativo
 ./up.sh   # escolha o contexto Docker desejado quando solicitado
 ```
+> **Nota:** O deploy agora utiliza uma imagem customizada (`Dockerfile-loonar`) que embute todas as configurações e arquivos necessários, incluindo o `.env` e customizações Python. O script `up.sh` oferece um menu para escolher entre rebuild da imagem ou uso da imagem atual, tornando o processo mais flexível e rápido. Apenas volumes de dados persistentes são utilizados, sem necessidade de volumes para arquivos de configuração.
 
 O script `up.sh` lista todos os contextos Docker, permite escolher o alvo (local ou remoto) e cria os volumes/persistência automaticamente usando volumes gerenciados pelo Docker.
 

@@ -22,11 +22,51 @@ from urllib.parse import urlparse
 
 from cachelib.redis import RedisCache
 from celery.schedules import crontab
+from flask_appbuilder.security.manager import AUTH_DB
+
+from loonar import LoonarAppInitializer
+from loonar.ldap_config import get_ldap_setting
+from loonar.security import LoonarSecurityManager
 
 # Security
 SECRET_KEY = os.environ.get("SUPERSET_SECRET_KEY") or os.environ.get("SECRET_KEY")
 if not SECRET_KEY:
     raise ValueError("SECRET_KEY must be set in production")
+
+AUTH_TYPE = AUTH_DB
+AUTH_USER_REGISTRATION = True
+AUTH_USER_REGISTRATION_ROLE = "Gamma"
+
+AUTH_LDAP_SERVER = get_ldap_setting("LOONAR_LDAP_SERVER")
+AUTH_LDAP_USE_TLS = (
+    get_ldap_setting("LOONAR_LDAP_USE_SSL", "false") or "false"
+).lower() == "true"
+AUTH_LDAP_BIND_USER = get_ldap_setting("LOONAR_LDAP_BIND_DN")
+AUTH_LDAP_BIND_PASSWORD = get_ldap_setting("LOONAR_LDAP_BIND_PASSWORD")
+AUTH_LDAP_SEARCH = get_ldap_setting("LOONAR_LDAP_USER_BASE")
+AUTH_LDAP_UID_FIELD = os.getenv("LOONAR_LDAP_UID_ATTR", "sAMAccountName")
+AUTH_LDAP_FIRSTNAME_FIELD = os.getenv("LOONAR_LDAP_FIRSTNAME_ATTR", "givenName")
+AUTH_LDAP_LASTNAME_FIELD = os.getenv("LOONAR_LDAP_LASTNAME_ATTR", "sn")
+AUTH_LDAP_EMAIL_FIELD = os.getenv("LOONAR_LDAP_EMAIL_ATTR", "mail")
+AUTH_LDAP_ALLOW_SELF_SIGNED = True
+AUTH_LDAP_BIND_FIRST = False
+AUTH_LDAP_TLS_DEMAND = False
+AUTH_LDAP_TLS_CACERTDIR: str | None = None
+AUTH_LDAP_TLS_CACERTFILE: str | None = None
+AUTH_LDAP_TLS_CERTFILE: str | None = None
+AUTH_LDAP_TLS_KEYFILE: str | None = None
+AUTH_LDAP_APPEND_DOMAIN: str | None = None
+AUTH_LDAP_USERNAME_FORMAT: str | None = None
+AUTH_LDAP_SEARCH_FILTER: str | None = None
+AUTH_LDAP_GROUP_FIELD = "memberOf"
+
+CUSTOM_SECURITY_MANAGER = LoonarSecurityManager
+SECURITY_LOGIN_TEMPLATE = "loonar/security/login.html"
+APP_INITIALIZER = LoonarAppInitializer
+
+# Ensure reCAPTCHA keys are always present in the config to avoid KeyError
+RECAPTCHA_PUBLIC_KEY = os.environ.get("RECAPTCHA_PUBLIC_KEY", "")
+RECAPTCHA_PRIVATE_KEY = os.environ.get("RECAPTCHA_PRIVATE_KEY", "")
 
 SUPERSET_ENV = "production"
 
@@ -142,6 +182,9 @@ def _extend_csp_sources(base_sources: list[str]) -> list[str]:
 
 
 # Security Settings
+GOOGLE_FONTS_STYLE_SRC = "https://fonts.googleapis.com"
+GOOGLE_FONTS_FONT_SRC = "https://fonts.gstatic.com"
+
 TALISMAN_ENABLED = True
 TALISMAN_CONFIG = {
     "content_security_policy": {
@@ -150,8 +193,10 @@ TALISMAN_CONFIG = {
         "script-src": _extend_csp_sources(
             ["'self'", "'unsafe-inline'", "'unsafe-eval'"]
         ),
-        "style-src": _extend_csp_sources(["'self'", "'unsafe-inline'"]),
-        "font-src": _extend_csp_sources(["'self'", "data:"]),
+        "style-src": _extend_csp_sources(
+            ["'self'", "'unsafe-inline'", GOOGLE_FONTS_STYLE_SRC]
+        ),
+        "font-src": _extend_csp_sources(["'self'", "data:", GOOGLE_FONTS_FONT_SRC]),
     },
     "force_https": True,
     "force_https_permanent": True,

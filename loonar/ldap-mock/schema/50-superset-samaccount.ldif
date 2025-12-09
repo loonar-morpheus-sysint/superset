@@ -1,0 +1,7 @@
+# Minimal schema to expose the sAMAccountName attribute for the mock AD
+# so that we can keep the same configuration used against the real server.
+
+dn: cn=superset-custom,cn=schema,cn=config
+objectClass: olcSchemaConfig
+cn: superset-custom
+olcAttributeTypes: ( 1.2.840.113556.1.4.221 NAME 'sAMAccountName' DESC 'Windows logon name (mock)' EQUALITY caseIgnoreMatch SUBSTR caseIgnoreSubstringsMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.15 SINGLE-VALUE )

@@ -27,6 +27,7 @@ cd superset/loonar
 
 ```bash
 ./up.sh
+> **Novidade:** Agora o deploy utiliza uma imagem customizada (`Dockerfile-loonar`) que já embute todas as configurações e arquivos necessários, incluindo o `.env` e customizações Python. Não é mais necessário mapear volumes para arquivos de configuração, apenas os volumes de dados persistentes são usados. O script `up.sh` também oferece um menu para escolher entre rebuild da imagem (após alterações de código/config) ou uso da imagem atual para deploy rápido.
 ```
 
 O script irá:
@@ -34,8 +35,9 @@ O script irá:
 1. Validar se o Docker está acessível e se o `.env` existe.
 2. Listar os contextos Docker configurados (`docker context ls`).
 3. Permitir que você escolha o contexto alvo ou mantenha o atual.
-4. Detectar se o `docker-compose-loonar.yml` define redes. Se não definir, perguntará qual rede utilizar ou criará uma nova.
-5. Executar `docker compose --env-file loonar/.env -f docker-compose-loonar.yml up -d --build --remove-orphans` no contexto escolhido.
+4. Perguntar qual fonte de LDAP deseja usar (Active Directory real ou servidor mock) e atualizar a variável `LOONAR_LDAP_MODE` automaticamente.
+5. Detectar se o `docker-compose-loonar.yml` define redes. Se não definir, perguntará qual rede utilizar ou criará uma nova.
+6. Executar `docker compose --env-file loonar/.env -f docker-compose-loonar.yml up -d --build --remove-orphans` no contexto escolhido.
 
 Todos os diretórios de dados (Superset, Postgres, Redis, logs do Nginx) agora são **volumes Docker nomeados** (`superset_home_data`, `db_data`, `redis_data`, `nginx_logs_data`). Assim não é necessário preparar pastas locais nem ajustar permissões manualmente.
 
@@ -62,217 +64,12 @@ Para encerrar os serviços:
 
 ---
 
-## 🧭 Cenários
-
-| Cenário | Como proceder |
-| --- | --- |
-| Desenvolvimento local | Execute `./up.sh`, mantenha o contexto `default` e acesse via `http://localhost:8088`. |
-| Servidor remoto (Docker Context) | Crie um contexto (`docker context create producao ...`) e escolha-o quando o script listar as opções. O build e os volumes serão criados diretamente no daemon remoto. |
-| Execução direta no host remoto | Conecte-se via SSH, navegue até `superset/loonar` e execute `./up.sh` no próprio servidor. |
-
----
-
-## 🐛 Troubleshooting
-
-| Problema | Ação sugerida |
-| --- | --- |
-| `arquivo .env não encontrado` | Execute `./loonar/rotate-keys.sh`. |
-| Contexto não listado | Verifique com `docker context ls` e crie/o atualize conforme necessário. |
-| Portas 80/443 ocupadas | Edite `docker-compose-loonar.yml` no serviço `nginx` para ajustar o `ports`. |
-| UI em branco + erros CSP para `https://superset/...` | Recrie o `nginx` com o template novo executando `./loonar/up.sh` (ou `docker compose --env-file loonar/.env -f docker-compose-loonar.yml restart nginx`). Valide com `curl -I https://$SUPERSET_HOST/static/appbuilder/css/flags/flags16.css` — o retorno deve ser 200 sem redirecionar; depois limpe o cache do navegador. |
-| Reset completo dos dados | Rode `./down.sh -v` e depois `./up.sh` para recriar volumes limpos. |
-
----
-
-## 🔐 Boas práticas
-
-- Não versione `loonar/.env`.
-- Gere segredos únicos sempre que mover para um novo ambiente (`rotate-keys.sh`).
-- Configure certificados TLS válidos em produção.
-- Restrinja o acesso aos contextos Docker remotos (SSH com chave, VPN, etc.).
-- Altere a senha padrão do usuário `admin` assim que possível.
-
----
-
-## 📚 Arquivos importantes
-
-- `loonar/up.sh` – script interativo de deploy
-- `loonar/down.sh` – encerra serviços
-- `loonar/rotate-keys.sh` – gera segredos e `.env`
-- `docker-compose-loonar.yml` – definição dos serviços e volumes nomeados
-- `loonar/README-DEPLOY.md` / `loonar/QUICKSTART.md` – documentação adicional
-
----
-
 ## 📞 Suporte adicional
 
 - Documentação oficial do Superset: <https://superset.apache.org/docs/>
-- Guia completo de deploy: [`DEPLOY.md`](DEPLOY.md)# Superset Loonar - Guia de Instalação
+- Guia completo de deploy: [`DEPLOY.md`](DEPLOY.md)
 
-Este guia descreve como implantar o Apache Superset com configurações Loonar em um host novo, evitando problemas comuns de permissões.
-
-## 📋 Pré-requisitos
-
-- Docker Engine 20.10+
-- Docker Compose 2.0+
-- Acesso sudo no host
-- Mínimo 4GB RAM disponível
-- Mínimo 10GB espaço em disco
-
-## 🚀 Instalação em Host Novo
-
-### 1. Clone o Repositório
-
-```bash
-git clone <repository-url>
-cd superset
-```
-
-### 2. Execute o Script de Deploy
-
-O novo fluxo está concentrado em `loonar/up.sh`, que seleciona o contexto Docker, cria redes/volumes quando necessário e executa o `docker compose up`.
-
-```bash
-cd loonar
-./up.sh
-```
-
-Os dados persistentes são criados automaticamente como **volumes Docker nomeados**, dispensando `sudo` e criação manual de diretórios.
-
-### 3. Configure Variáveis de Ambiente
-
-Se ainda não existir, crie o arquivo de configuração:
-
-```bash
-cp docker/.env-non-dev docker/.env
-```
-
-Edite `docker/.env` e configure:
-
-```bash
-# Database
-DATABASE_PASSWORD=<senha-forte-aqui>
-
-# Redis
-REDIS_PASSWORD=<senha-redis-aqui>
-
-# Superset
-SECRET_KEY=<gere-uma-chave-secreta-forte>
-SUPERSET_LOAD_EXAMPLES=no
-
-# Admin (altere após primeiro login)
-ADMIN_USERNAME=admin
-ADMIN_PASSWORD=admin
-```
-
-**Gerar SECRET_KEY segura:**
-```bash
-openssl rand -base64 42
-```
-
-### 4. Acompanhe a Inicialização
-
-Use o próprio assistente do `up.sh` ou rode manualmente:
-
-```bash
-docker compose --env-file loonar/.env -f docker-compose-loonar.yml logs -f superset_app
-```
-
-### 6. Acesse o Superset
-
-Abra seu navegador em:
-- **HTTP:** http://localhost
-- **HTTPS:** https://localhost (se configurou certificados)
-
-**Credenciais padrão:**
-- Usuário: `admin`
-- Senha: `admin` (ou a que configurou no `.env`)
-
-⚠️ **ALTERE A SENHA após primeiro login!**
-
-## 🔧 Resolução de Problemas
-
-### Logs e troubleshooting
-
-- `docker compose --env-file loonar/.env -f docker-compose-loonar.yml ps`
-- `docker compose --env-file loonar/.env -f docker-compose-loonar.yml logs -f superset_app`
-
-Se precisar reiniciar ou limpar dados:
-
-```bash
-./loonar/down.sh        # Para os serviços
-./loonar/down.sh -v     # Remove volumes Docker nomeados
-./loonar/up.sh          # Recria tudo
-```
-
-Como os volumes são gerenciados pelo Docker, não é necessário remover diretórios manualmente. Use `docker volume ls` para inspecionar ou `docker volume rm <nome>` para limpeza manual.
-
-## 🔒 Checklist de Segurança para Produção
-
-Antes de ir para produção, revise:
-
-- [ ] `SECRET_KEY` única e forte (42+ caracteres)
-- [ ] Senhas de banco e Redis fortes
-- [ ] Alterar senha padrão do admin
-- [ ] Configurar TLS/SSL no nginx
-- [ ] Desabilitar `DEBUG` no `superset_config.py`
-- [ ] Configurar CORS apropriadamente
-- [ ] Restringir acesso a portas (usar apenas nginx)
-- [ ] Configurar firewall do host
-- [ ] Habilitar logs de auditoria
-- [ ] Configurar backup automático dos volumes
-- [ ] Usar usuário não-root nos containers (remover `user: "root"`)
-- [ ] Revisar e atualizar dependências regularmente
-
-Ver: https://superset.apache.org/docs/security/
-
-## 🛠 Comandos Úteis
-
-```bash
-# Ver todos os containers
-docker compose -f docker-compose-loonar.yml ps
-
-# Parar tudo
-docker compose -f docker-compose-loonar.yml down
-
-# Reiniciar um serviço específico
-docker compose -f docker-compose-loonar.yml restart superset_app
-
-# Ver logs de um serviço
-docker logs -f superset_app
-docker logs -f superset_worker
-docker logs -f superset_db
-
-# Acessar shell de um container
-docker exec -it superset_app bash
-
-# Executar comando Superset
-docker exec -it superset_app superset --help
-
-# Criar novo admin
-docker exec -it superset_app superset fab create-admin
-
-# Backup do banco
-docker exec superset_db pg_dump -U superset superset > backup-$(date +%Y%m%d).sql
-
-# Restaurar banco
-cat backup.sql | docker exec -i superset_db psql -U superset superset
-```
-
-## 📚 Arquivos de Configuração
-
-### docker/.env
-Variáveis de ambiente principais (senhas, URLs, etc.)
-
-### docker/.env-local (opcional)
-Overrides locais que não devem ser versionados
-
-### docker/pythonpath_dev/superset_config.py
-Configuração Python do Superset (cache, features, security, etc.)
-
-### docker/nginx/
-- `nginx.conf` - Configuração principal do nginx
-- `conf.d/superset.conf` - Configuração de proxy reverso para Superset
+````
 
 ## 🔄 Atualizações
 
@@ -293,11 +90,30 @@ docker compose -f docker-compose-loonar.yml up -d
 docker logs -f superset_init  # Acompanhar migrações
 ```
 
+## 🧪 Servidor Active Directory Mock
+
+Quando for necessário testar a integração LDAP/AD sem acessar o diretório corporativo, utilize o Compose auxiliar `docker-compose-ldap-mock.yml` e o script `./loonar/up-ldap-mock.sh`.
+
+1. Ajuste (se quiser) as variáveis em `loonar/ldap-mock/.env`. Por padrão ele cria o domínio `loonardc.local`, expõe a porta `3389` e popula a estrutura `OU=03-SERVICOS`/`OU=04-CLIENTES`.
+2. Execute `./loonar/up-ldap-mock.sh` e selecione o contexto Docker desejado (local ou remoto). O script garante que a rede Docker `superset` exista, valida o compose auxiliar e sobe o serviço `mock_ad` (imagem `osixia/openldap`). Ele também envia o LDIF/schema diretamente do diretório `loonar/ldap-mock/` para dentro do container, então funciona inclusive quando o Docker Engine está em outro host (contextos remotos via SSH, por exemplo).
+3. Assim que o OpenLDAP ficar disponível, o script reaplica automaticamente o arquivo `50-loonar-structure.ldif`: primeiro remove as OUs `03-SERVICOS` e `04-CLIENTES` (se já existirem) e depois reimporta todo o conteúdo. Isso garante que sucessivas execuções sempre mantenham os mesmos usuários/grupos do LDIF.
+4. Ao final é executado um `ldapsearch` dentro do container para confirmar que o bind com a conta de serviço está funcional. Caso o teste falhe, os logs do mock são exibidos automaticamente.
+4. Aponte o Superset para `ldap://<host-remoto>:3389` usando as mesmas credenciais definidas no `.env` principal:
+  - **Conta de serviço:** `CN=Morpheus Serviços,OU=BR-BH,OU=03-SERVICOS,DC=loonardc,DC=local`
+  - **Senha da conta de serviço:** `Morph&us#2020`
+  - **Base DN de busca:** `OU=04-CLIENTES,DC=loonardc,DC=local`
+  - **Usuário teste:** `CN=Joana Superset,OU=04-CLIENTES,DC=loonardc,DC=local` (`Superset#2024`)
+
+O LDIF em `loonar/ldap-mock/bootstrap/50-loonar-structure.ldif` mantém os grupos `Gamma` e `Admin`, que correspondem às roles padrão do Superset. Caso precise de novos grupos/usuários, basta editar esse arquivo e executar novamente `./loonar/up-ldap-mock.sh` (ele sempre sobrescreve o conteúdo existente dessas OUs com o LDIF atualizado). Há também um schema mínimo em `loonar/ldap-mock/schema/50-superset-samaccount.ldif` que expõe o atributo `sAMAccountName`, permitindo usar o mesmo `.env` tanto com o mock quanto com o AD real.
+
+Como o `.env` armazena os blocos `*_REAL` e `*_MOCK`, você pode alternar entre eles a qualquer momento reexecutando `./up.sh` e escolhendo a opção desejada. O script atualizará `LOONAR_LDAP_MODE`, executará `docker compose ... up -d` e o Superset passará a usar o novo servidor sem necessidade de editar arquivos manualmente.
+
 ## 📞 Suporte
 
 Para problemas específicos do Loonar, consulte a equipe de desenvolvimento.
 
 Para questões do Apache Superset:
+
 - Documentação: https://superset.apache.org/docs/
 - GitHub: https://github.com/apache/superset
 - Slack: https://apache-superset.slack.com/

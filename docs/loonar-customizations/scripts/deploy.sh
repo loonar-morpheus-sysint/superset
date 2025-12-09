@@ -67,52 +67,52 @@ validate_environment() {
 # Pre-deployment checks
 pre_deploy_checks() {
     log_info "Running pre-deployment checks..."
-    
+
     # Check Docker
     if ! command -v docker &> /dev/null; then
         log_error "Docker is not installed"
         exit 1
     fi
-    
+
     # Check Docker Compose
     if ! command -v docker-compose &> /dev/null; then
         log_error "Docker Compose is not installed"
         exit 1
     fi
-    
+
     # Check .env file
     if [ ! -f "${PROJECT_ROOT}/.env" ]; then
         log_error ".env file not found in ${PROJECT_ROOT}"
         exit 1
     fi
-    
+
     # Check Docker daemon
     if ! docker ps &> /dev/null; then
         log_error "Docker daemon is not running"
         exit 1
     fi
-    
+
     log_success "Pre-deployment checks passed"
 }
 
 # Backup function
 backup_config() {
     log_info "Creating configuration backup..."
-    
+
     mkdir -p "$BACKUP_DIR"
-    
+
     # Backup .env
     if [ -f "${PROJECT_ROOT}/.env" ]; then
         cp "${PROJECT_ROOT}/.env" "${BACKUP_DIR}/.env_${TIMESTAMP}"
         log_success "Backed up .env to ${BACKUP_DIR}/.env_${TIMESTAMP}"
     fi
-    
+
     # Backup docker-compose.override.yml if exists
     if [ -f "${PROJECT_ROOT}/docker-compose.override.yml" ]; then
         cp "${PROJECT_ROOT}/docker-compose.override.yml" "${BACKUP_DIR}/docker-compose.override.yml_${TIMESTAMP}"
         log_success "Backed up docker-compose.override.yml"
     fi
-    
+
     # Database backup (if database is running)
     if docker-compose -f "${PROJECT_ROOT}/docker-compose.yml" ps db &> /dev/null; then
         log_info "Backing up database..."
@@ -125,65 +125,65 @@ backup_config() {
 # Deployment function
 deploy() {
     log_info "Starting deployment to $ENVIRONMENT..."
-    
+
     # Backup first
     backup_config
-    
+
     # Change to project directory
     cd "$PROJECT_ROOT"
-    
+
     # Load environment variables
     export ENVIRONMENT="$ENVIRONMENT"
-    
+
     # Build images
     log_info "Building Docker images..."
     docker-compose build --no-cache 2>&1 | tee -a "$LOG_FILE" || {
         log_error "Docker build failed"
         return 1
     }
-    
+
     # Stop existing containers
     log_info "Stopping existing containers..."
     docker-compose down 2>&1 | tee -a "$LOG_FILE" || true
-    
+
     # Start services
     log_info "Starting services..."
     docker-compose up -d 2>&1 | tee -a "$LOG_FILE" || {
         log_error "Failed to start services"
         return 1
     }
-    
+
     # Wait for services to be ready
     log_info "Waiting for services to be ready..."
     sleep 10
-    
+
     # Health check
     if ! health_check; then
         log_error "Health check failed after deployment"
         return 1
     fi
-    
+
     log_success "Deployment completed successfully"
 }
 
 # Health check function
 health_check() {
     log_info "Performing health checks..."
-    
+
     local max_attempts=30
     local attempt=1
-    
+
     while [ $attempt -le $max_attempts ]; do
         if curl -s http://localhost:8088/health | grep -q "healthy"; then
             log_success "Health check passed"
             return 0
         fi
-        
+
         log_info "Health check attempt $attempt/$max_attempts..."
         sleep 2
         ((attempt++))
     done
-    
+
     log_error "Health check failed after $max_attempts attempts"
     return 1
 }
@@ -191,25 +191,25 @@ health_check() {
 # Rollback function
 rollback() {
     log_warn "Rolling back deployment..."
-    
+
     # Find latest backup
     local latest_backup=$(ls -t "${BACKUP_DIR}/.env_"* 2>/dev/null | head -1)
-    
+
     if [ -z "$latest_backup" ]; then
         log_error "No backup found for rollback"
         return 1
     fi
-    
+
     log_info "Restoring from backup: $latest_backup"
     cp "$latest_backup" "${PROJECT_ROOT}/.env"
-    
+
     # Restart services
     cd "$PROJECT_ROOT"
     docker-compose down
     docker-compose up -d
-    
+
     sleep 5
-    
+
     if health_check; then
         log_success "Rollback completed successfully"
         return 0
@@ -233,9 +233,9 @@ main() {
     log_info "Action: $ACTION"
     log_info "Timestamp: $TIMESTAMP"
     log_info "Log file: $LOG_FILE"
-    
+
     validate_environment
-    
+
     case "$ACTION" in
         deploy)
             pre_deploy_checks
@@ -261,7 +261,7 @@ main() {
             exit 1
             ;;
     esac
-    
+
     log_success "Script execution completed"
 }
 

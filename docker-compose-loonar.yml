@@ -59,16 +59,12 @@ x-superset-env: &superset-env
     required: false
 
 x-superset-volumes:
-  &superset-volumes # Persistência do superset_home e customizações Loonar
+  &superset-volumes # Volumes de dados persistentes apenas (customizações já estão embutidas na imagem)
   - superset_home_data:/app/superset_home
-  - ./loonar/pythonpath:/app/pythonpath
-  - ./loonar/logo:/app/superset/static/assets/images/loonar:ro
 
-x-common-build: &common-build
-  context: .
-  target: lean
-  cache_from:
-    - apache/superset-cache:3.10-slim-bookworm
+x-extra-hosts: &superset-extra-hosts
+  - "host.docker.internal:host-gateway"
+  - "${SUPERSET_HOST:-superset.local}:host-gateway"
 
 services:
 # Use sempre imagens oficiais e tags de versão específicas para produção
@@ -112,13 +108,15 @@ services:
 
   superset_app:
     env_file: *superset-env
-    # Opção 1: Build local (lean)
+    # Build com Dockerfile customizado para Loonar
     build:
-      <<: *common-build
+      context: .
+      dockerfile: Dockerfile-loonar
+      target: loonar
       network: host
       extra_hosts:
         - "host.docker.internal:host-gateway"
-    # Opção 2: Usar imagem oficial (descomente as linhas abaixo e comente o 'build' acima)
+    # Opção alternativa: Usar imagem oficial (descomente as linhas abaixo e comente o 'build' acima)
     # image: apache/superset:latest
     container_name: superset_app
     command: ["/app/docker/docker-bootstrap.sh", "app-gunicorn"]
@@ -127,6 +125,7 @@ services:
       superset_init:
         condition: service_completed_successfully
     volumes: *superset-volumes
+    extra_hosts: *superset-extra-hosts
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8088/health || exit 1"]
       interval: 30s
@@ -139,7 +138,9 @@ services:
   superset_worker:
     env_file: *superset-env
     build:
-      <<: *common-build
+      context: .
+      dockerfile: Dockerfile-loonar
+      target: loonar
       network: host
       extra_hosts:
         - "host.docker.internal:host-gateway"
@@ -153,6 +154,7 @@ services:
     environment:
       CELERYD_CONCURRENCY: 2
     volumes: *superset-volumes
+    extra_hosts: *superset-extra-hosts
     healthcheck:
       test:
         ["CMD-SHELL", "celery -A superset.tasks.celery_app:app inspect ping -d celery@$${HOSTNAME}"]
@@ -166,7 +168,9 @@ services:
   superset_worker_beat:
     env_file: *superset-env
     build:
-      <<: *common-build
+      context: .
+      dockerfile: Dockerfile-loonar
+      target: loonar
       network: host
       extra_hosts:
         - "host.docker.internal:host-gateway"
@@ -177,6 +181,7 @@ services:
     depends_on:
       - superset_worker
     volumes: *superset-volumes
+    extra_hosts: *superset-extra-hosts
     networks:
       - superset
     healthcheck:
@@ -185,7 +190,9 @@ services:
   superset_init:
     env_file: *superset-env
     build:
-      <<: *common-build
+      context: .
+      dockerfile: Dockerfile-loonar
+      target: loonar
       network: host
       extra_hosts:
         - "host.docker.internal:host-gateway"
@@ -193,12 +200,15 @@ services:
     command: ["/app/docker/docker-init.sh"]
     user: "root"
     restart: "no"
+    profiles:
+      - init
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
     volumes: *superset-volumes
+    extra_hosts: *superset-extra-hosts
     networks:
       - superset
     healthcheck:

@@ -12,6 +12,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 COMPOSE_FILE="$PROJECT_ROOT/docker-compose-loonar.yml"
 ENV_FILE="$SCRIPT_DIR/.env"
+LDAP_MOCK_ENV_FILE="$SCRIPT_DIR/ldap-mock/.env"
 
 if ! command -v docker >/dev/null 2>&1; then
     echo "❌ Docker não está instalado ou não está no PATH"
@@ -77,6 +78,170 @@ select_context() {
     fi
 }
 
+get_value_from_file() {
+    local file="$1"
+    local key="$2"
+    local default_value="${3:-}"
+    if [ ! -f "$file" ]; then
+        echo "$default_value"
+        return
+    fi
+    local value
+    value=$(grep -E "^${key}=" "$file" | tail -n 1 | cut -d '=' -f2- || true)
+    value=${value%%$'\r'}
+    if [ -z "$value" ]; then
+        value="$default_value"
+    fi
+    echo "$value"
+}
+
+get_env_value() {
+    local key="$1"
+    local default_value="${2:-}"
+    get_value_from_file "$ENV_FILE" "$key" "$default_value"
+}
+
+set_env_value() {
+    local key="$1"
+    local value="$2"
+    local tmp
+    tmp=$(mktemp)
+    awk -v key="$key" -v value="$value" '
+        BEGIN { found = 0 }
+        $0 ~ "^" key "=" {
+            print key "=" value
+            found = 1
+            next
+        }
+        { print }
+        END {
+            if (!found) {
+                print key "=" value
+            }
+        }
+    ' "$ENV_FILE" > "$tmp"
+    mv "$tmp" "$ENV_FILE"
+}
+
+select_build_mode() {
+    echo "🔨 Modo de build:"
+    echo "   1) Rebuild da imagem Dockerfile-loonar (recomendado após mudanças de código)"
+    echo "   2) Usar imagem atual (deploy rápido, sem rebuild)"
+    read -r -p "Escolha o modo desejado (Enter para usar imagem atual): " option || true
+
+    case "$option" in
+        1|rebuild|REBUILD)
+            BUILD_MODE="rebuild"
+            echo "✅ Será feito rebuild do Dockerfile-loonar"
+            ;;
+        *)
+            BUILD_MODE="current"
+            echo "✅ Será usada a imagem atual"
+            ;;
+    esac
+}
+
+select_ldap_mode() {
+    local current_mode
+    current_mode=$(get_env_value "LOONAR_LDAP_MODE" "real")
+
+    echo "🔐 Modo LDAP atual: $current_mode"
+    echo "   1) Active Directory real (produção)"
+    echo "   2) Servidor mock (docker-compose-ldap-mock)"
+    read -r -p "Escolha o modo desejado (Enter mantém $current_mode): " option || true
+
+    local new_mode="$current_mode"
+    case "$option" in
+        1|real|REAL)
+            new_mode="real"
+            ;;
+        2|mock|MOCK)
+            new_mode="mock"
+            ;;
+    esac
+
+    if [ "$new_mode" != "$current_mode" ]; then
+        set_env_value "LOONAR_LDAP_MODE" "$new_mode"
+        echo "✅ LOONAR_LDAP_MODE atualizado para '$new_mode' em $ENV_FILE"
+    else
+        echo "ℹ️  Mantendo o modo '$current_mode'"
+    fi
+
+    export LOONAR_LDAP_MODE="$new_mode"
+    if [ "$new_mode" = "mock" ]; then
+        sync_mock_server_uri
+    fi
+
+    local upper_mode
+    upper_mode=$(echo "$new_mode" | tr '[:lower:]' '[:upper:]')
+    local server_key="LOONAR_LDAP_SERVER_${upper_mode}"
+    local server_value
+    server_value=$(get_env_value "$server_key" "")
+    if [ -n "$server_value" ]; then
+        echo "🔗 Superset irá apontar para: $server_value"
+    fi
+}
+
+sync_mock_server_uri() {
+    local superset_host
+    superset_host=$(get_env_value "SUPERSET_HOST" "localhost")
+    if [ -z "$superset_host" ]; then
+        superset_host="localhost"
+    fi
+
+    local mock_port
+    mock_port=$(get_value_from_file "$LDAP_MOCK_ENV_FILE" "LDAP_MOCK_PORT" "3389")
+    if [ -z "$mock_port" ]; then
+        mock_port="3389"
+    fi
+
+    local uri="ldap://${superset_host}:${mock_port}"
+    local current_uri
+    current_uri=$(get_env_value "LOONAR_LDAP_SERVER_MOCK" "")
+
+    if [ "$current_uri" != "$uri" ]; then
+        set_env_value "LOONAR_LDAP_SERVER_MOCK" "$uri"
+        echo "🔗 LOONAR_LDAP_SERVER_MOCK atualizado para $uri (com base em SUPERSET_HOST)"
+    else
+        echo "ℹ️  LOONAR_LDAP_SERVER_MOCK já está configurado como $uri"
+    fi
+}
+
+check_superset_initialization() {
+    # Marcar arquivo de inicialização
+    local init_marker="$PROJECT_ROOT/.superset_initialized"
+
+    # Verificar se já foi inicializado e se o banco de dados existe
+    if [ ! -f "$init_marker" ]; then
+        echo "🔧 Primeira execução detectada - inicializando Superset..."
+
+        # Inicializar com profile 'init'
+        echo "🔄 Executando superset_init com profile init..."
+        docker compose "${COMPOSE_ARGS[@]}" --profile init up -d superset_init
+
+        # Aguardar conclusão
+        echo "⏳ Aguardando inicialização do banco de dados..."
+        docker compose "${COMPOSE_ARGS[@]}" logs -f superset_init
+
+        # Verificar se foi bem-sucedido
+        if docker compose "${COMPOSE_ARGS[@]}" ps superset_init 2>/dev/null | grep -q "Exited (0)"; then
+            echo "✅ Superset inicializado com sucesso!"
+
+            # Remover container de inicialização
+            echo "🧹 Removendo container superset_init..."
+            docker compose "${COMPOSE_ARGS[@]}" rm -f superset_init
+
+            # Marcar como inicializado
+            touch "$init_marker"
+        else
+            echo "❌ Erro na inicialização do Superset"
+            exit 1
+        fi
+    else
+        echo "ℹ️  Superset já foi inicializado anteriormente"
+    fi
+}
+
 # Retorna 0 se houver bloco de redes na raiz do compose
 compose_has_networks() {
     grep -Eq '^networks:' "$COMPOSE_FILE"
@@ -126,9 +291,15 @@ EOF
 
 echo "🚀 Implantando Superset Loonar"
 select_context
+select_build_mode
+select_ldap_mode
 
 COMPOSE_ARGS=(--env-file "$ENV_FILE" -f "$COMPOSE_FILE")
 TEMP_FILE=""
+
+# Inicializar estrutura do banco de dados se necessário (apenas na primeira vez)
+check_superset_initialization
+
 if ! compose_has_networks; then
     TEMP_FILE=$(choose_network_override)
     COMPOSE_ARGS+=(-f "$TEMP_FILE")
@@ -145,7 +316,12 @@ echo "🧪 Validando configuração..."
 docker compose "${COMPOSE_ARGS[@]}" config >/dev/null
 
 echo "📦 Construindo e iniciando serviços..."
-docker compose "${COMPOSE_ARGS[@]}" up -d --build --remove-orphans
+BUILD_FLAG=""
+if [ "$BUILD_MODE" = "rebuild" ]; then
+    BUILD_FLAG="--build"
+    echo "🔨 Rebuilding Dockerfile-loonar..."
+fi
+docker compose "${COMPOSE_ARGS[@]}" up -d $BUILD_FLAG --remove-orphans
 
 echo ""
 echo "📊 Status dos containers:"

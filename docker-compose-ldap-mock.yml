@@ -1,0 +1,58 @@
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Docker Compose auxiliar para subir um servidor LDAP fake (OpenLDAP)
+# com a mesma estrutura utilizada pelo Superset Loonar para Active Directory.
+
+services:
+  mock_ad:
+    image: osixia/openldap:1.5.0
+    container_name: loonar_mock_ad
+    restart: unless-stopped
+    command: ["--copy-service"]
+    env_file:
+      - ./loonar/ldap-mock/.env
+    environment:
+      LDAP_ORGANISATION: ${LDAP_ORGANISATION:-Loonar Mock Directory}
+      LDAP_DOMAIN: ${LDAP_DOMAIN:-loonardc.local}
+      LDAP_BASE_DN: ${LDAP_BASE_DN:-DC=loonardc,DC=local}
+      LDAP_TLS: ${LDAP_TLS:-false}
+      LDAP_READONLY_USER: ${LDAP_READONLY_USER:-true}
+      LDAP_READONLY_USER_USERNAME: ${LDAP_READONLY_USER_USERNAME:-readonly}
+      LDAP_READONLY_USER_PASSWORD: ${LDAP_READONLY_USER_PASSWORD:-readonly}
+    ports:
+      - "${LDAP_MOCK_PORT:-3389}:389"
+      - "${LDAP_MOCK_TLS_PORT:-3636}:636"
+    volumes:
+      - ldap_mock_db:/var/lib/ldap
+      - ldap_mock_config:/etc/ldap/slapd.d
+    networks:
+      - superset
+    healthcheck:
+      test:
+        ["CMD-SHELL", "pgrep -f slapd >/dev/null 2>&1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+
+volumes:
+  ldap_mock_db:
+  ldap_mock_config:
+
+networks:
+  superset:
+    external: true
+    name: ${LDAP_MOCK_NETWORK:-superset}
