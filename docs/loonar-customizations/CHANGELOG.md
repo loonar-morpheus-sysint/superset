@@ -45,17 +45,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Deployment procedures guide
   - Configuration documentation
   - Contributing guidelines
-  
+
 - **Scripts**
   - `update-from-upstream.sh` - Sync with Apache Superset updates
   - `deploy.sh` - Automated deployment script
   - `backup-config.sh` - Configuration backup utility
   - `generate-changelog.sh` - Changelog generator from git commits
-  
+
 - **Templates**
   - `docker-compose.override.yml` - Docker Compose override configuration
   - `superset_config_loonar.py` - Example Loonar configuration file
-  
+
 - **Features**
   - LDAP auto-role creation system
   - Morpheus Data integration templates

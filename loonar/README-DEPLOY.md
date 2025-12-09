@@ -8,6 +8,7 @@ Sistema completo de deploy com suporte para instalação **local** ou **remota**
 cd loonar
 ./up.sh    # Script interativo com seleção de contexto e redes
 ```
+> **Nota:** O deploy agora utiliza uma imagem customizada (`Dockerfile-loonar`) que embute todas as configurações e arquivos necessários, incluindo o `.env` e customizações Python. O script `up.sh` oferece um menu para escolher entre rebuild da imagem ou uso da imagem atual, tornando o processo mais flexível e rápido. Apenas volumes de dados persistentes são utilizados, sem necessidade de volumes para arquivos de configuração.
 
 ## 📚 Documentação
 

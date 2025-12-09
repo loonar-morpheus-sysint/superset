@@ -1,0 +1,225 @@
+# Estrutura mínima para simular o AD da loonar
+# O container executará este LDIF na primeira inicialização.
+
+# Unidades Organizacionais de Serviço e Clientes
+
+dn: ou=03-SERVICOS,DC=loonardc,DC=local
+objectClass: top
+objectClass: organizationalUnit
+ou: 03-SERVICOS
+
+dn: ou=BR-BH,ou=03-SERVICOS,DC=loonardc,DC=local
+objectClass: top
+objectClass: organizationalUnit
+ou: BR-BH
+
+dn: ou=04-CLIENTES,DC=loonardc,DC=local
+objectClass: top
+objectClass: organizationalUnit
+ou: 04-CLIENTES
+
+dn: ou=BR_CATAR,ou=04-CLIENTES,DC=loonardc,DC=local
+objectClass: top
+objectClass: organizationalUnit
+ou: BR_CATAR
+
+# Conta de serviço utilizada pelo Superset
+
+dn: CN=Morpheus Serviços,OU=BR-BH,OU=03-SERVICOS,DC=loonardc,DC=local
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+objectClass: extensibleObject
+cn: Morpheus Serviços
+sn: Serviços
+givenName: Morpheus
+mail: morpheus.servicos@loonardc.local
+userPassword: Morph&us#2020
+sAMAccountName: morpheus.servicos
+
+dn: cn=Gamma,ou=04-CLIENTES,DC=loonardc,DC=local
+objectClass: top
+objectClass: groupOfNames
+cn: Gamma
+description: Grupo equivalente à role Gamma no Superset
+member: CN=Joana Superset,OU=04-CLIENTES,DC=loonardc,DC=local
+
+dn: cn=Admin,ou=04-CLIENTES,DC=loonardc,DC=local
+objectClass: top
+objectClass: groupOfNames
+cn: Admin
+description: Grupo equivalente à role Admin no Superset
+member: CN=Joana Superset,OU=04-CLIENTES,DC=loonardc,DC=local
+
+# Usuário padrão para testar logins via AD
+
+dn: CN=Joana Superset,OU=04-CLIENTES,DC=loonardc,DC=local
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+objectClass: extensibleObject
+cn: Joana Superset
+sn: Superset
+givenName: Joana
+mail: joana.superset@loonardc.local
+userPassword: #@!123
+sAMAccountName: joana.superset
+
+# -----------------------------
+# Grupos BR_CATAR
+# -----------------------------
+
+dn: cn=BR_CATARHML-ADMIN,OU=BR_CATAR,OU=04-CLIENTES,DC=loonardc,DC=local
+objectClass: top
+objectClass: groupOfNames
+cn: BR_CATARHML-ADMIN
+member: CN=Adriel Farias,OU=BR_CATAR,OU=04-CLIENTES,DC=loonardc,DC=local
+member: CN=Adriana duarte,OU=BR_CATAR,OU=04-CLIENTES,DC=loonardc,DC=local
+
+dn: cn=BR_CATARHML-OPERADOR,OU=BR_CATAR,OU=04-CLIENTES,DC=loonardc,DC=local
+objectClass: top
+objectClass: groupOfNames
+cn: BR_CATARHML-OPERADOR
+member: CN=Adriel Farias,OU=BR_CATAR,OU=04-CLIENTES,DC=loonardc,DC=local
+member: CN=Adriana duarte,OU=BR_CATAR,OU=04-CLIENTES,DC=loonardc,DC=local
+member: CN=david silvam,OU=BR_CATAR,OU=04-CLIENTES,DC=loonardc,DC=local
+
+dn: cn=BR_CATARHML_CONTROLE,OU=BR_CATAR,OU=04-CLIENTES,DC=loonardc,DC=local
+objectClass: top
+objectClass: groupOfNames
+cn: BR_CATARHML_CONTROLE
+member: CN=Adriel Farias,OU=BR_CATAR,OU=04-CLIENTES,DC=loonardc,DC=local
+member: CN=Adriana duarte,OU=BR_CATAR,OU=04-CLIENTES,DC=loonardc,DC=local
+member: CN=david silvam,OU=BR_CATAR,OU=04-CLIENTES,DC=loonardc,DC=local
+
+dn: cn=BR-CATAR-CONTROLE,OU=BR_CATAR,OU=04-CLIENTES,DC=loonardc,DC=local
+objectClass: top
+objectClass: groupOfNames
+cn: BR-CATAR-CONTROLE
+member: CN=Adriel Farias,OU=BR_CATAR,OU=04-CLIENTES,DC=loonardc,DC=local
+member: CN=Cristiano Santiago,OU=BR_CATAR,OU=04-CLIENTES,DC=loonardc,DC=local
+member: CN=Adriana duarte,OU=BR_CATAR,OU=04-CLIENTES,DC=loonardc,DC=local
+member: CN=david silvam,OU=BR_CATAR,OU=04-CLIENTES,DC=loonardc,DC=local
+member: CN=pedro almeida,OU=BR_CATAR,OU=04-CLIENTES,DC=loonardc,DC=local
+member: CN=wilson pires,OU=BR_CATAR,OU=04-CLIENTES,DC=loonardc,DC=local
+
+dn: cn=BR_CATAR-OPERADOR,OU=BR_CATAR,OU=04-CLIENTES,DC=loonardc,DC=local
+objectClass: top
+objectClass: groupOfNames
+cn: BR_CATAR-OPERADOR
+member: CN=Adriel Farias,OU=BR_CATAR,OU=04-CLIENTES,DC=loonardc,DC=local
+member: CN=Adriana duarte,OU=BR_CATAR,OU=04-CLIENTES,DC=loonardc,DC=local
+member: CN=david silvam,OU=BR_CATAR,OU=04-CLIENTES,DC=loonardc,DC=local
+member: CN=pedro almeida,OU=BR_CATAR,OU=04-CLIENTES,DC=loonardc,DC=local
+member: CN=wilson pires,OU=BR_CATAR,OU=04-CLIENTES,DC=loonardc,DC=local
+
+dn: cn=BR-CATAR-USER,OU=BR_CATAR,OU=04-CLIENTES,DC=loonardc,DC=local
+objectClass: top
+objectClass: groupOfNames
+cn: BR-CATAR-USER
+member: CN=Cristiano Santiago,OU=BR_CATAR,OU=04-CLIENTES,DC=loonardc,DC=local
+member: CN=Maria das Dores Faria Damasceno Res,OU=BR_CATAR,OU=04-CLIENTES,DC=loonardc,DC=local
+
+dn: cn=TESTE0302,OU=BR_CATAR,OU=04-CLIENTES,DC=loonardc,DC=local
+objectClass: top
+objectClass: groupOfNames
+cn: TESTE0302
+member: CN=Cristiano Santiago,OU=BR_CATAR,OU=04-CLIENTES,DC=loonardc,DC=local
+member: CN=Maria das Dores Faria Damasceno Res,OU=BR_CATAR,OU=04-CLIENTES,DC=loonardc,DC=local
+
+# -----------------------------
+# Usuários BR_CATAR (senha #@!123)
+# -----------------------------
+
+dn: CN=Adriel Farias,OU=BR_CATAR,OU=04-CLIENTES,DC=loonardc,DC=local
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+objectClass: extensibleObject
+cn: Adriel Farias
+sn: Farias
+givenName: Adriel
+mail: afarias@br_catar.local
+userPassword: #@!123
+sAMAccountName: afarias
+
+dn: CN=Cristiano Santiago,OU=BR_CATAR,OU=04-CLIENTES,DC=loonardc,DC=local
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+objectClass: extensibleObject
+cn: Cristiano Santiago
+sn: Santiago
+givenName: Cristiano
+mail: cristiano.santiago@br_catar.local
+userPassword: #@!123
+sAMAccountName: cristiano.santiago
+
+dn: CN=Maria das Dores Faria Damasceno Res,OU=BR_CATAR,OU=04-CLIENTES,DC=loonardc,DC=local
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+objectClass: extensibleObject
+cn: Maria das Dores Faria Damasceno Res
+sn: das Dores Faria Damasceno
+givenName: Maria
+mail: dodora.resende@br_catar.local
+userPassword: #@!123
+sAMAccountName: dodora.resende
+
+dn: CN=Adriana duarte,OU=BR_CATAR,OU=04-CLIENTES,DC=loonardc,DC=local
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+objectClass: extensibleObject
+cn: Adriana duarte
+sn: duarte
+givenName: Adriana
+mail: adriana.duarte@loonardc.local
+userPassword: #@!123
+sAMAccountName: adriana.duarte
+
+dn: CN=david silvam,OU=BR_CATAR,OU=04-CLIENTES,DC=loonardc,DC=local
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+objectClass: extensibleObject
+cn: david silvam
+sn: silvam
+givenName: david
+mail: david.silvam@loonardc.local
+userPassword: #@!123
+sAMAccountName: david.silvam
+
+dn: CN=pedro almeida,OU=BR_CATAR,OU=04-CLIENTES,DC=loonardc,DC=local
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+objectClass: extensibleObject
+cn: pedro almeida
+sn: almeida
+givenName: pedro
+mail: pedro.almeidan@loonardc.local
+userPassword: #@!123
+sAMAccountName: pedro.almeidan
+
+dn: CN=wilson pires,OU=BR_CATAR,OU=04-CLIENTES,DC=loonardc,DC=local
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+objectClass: extensibleObject
+cn: wilson pires
+sn: pires
+givenName: wilson
+mail: wilson.pires@loonardc.local
+userPassword: #@!123
+sAMAccountName: wilson.pires
