@@ -6,46 +6,93 @@ SCRIPT_PATH="${BASH_SOURCE[0]}"
 SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
 SCRIPT_NAME="$(basename "$SCRIPT_PATH")"
 
-LOG_PATH="${LOG_PATH:-$SCRIPT_DIR}"
+LOG_PATH="$SCRIPT_DIR"
 LOG_FILE=""
 
 DEBUG=false
 SHOW_LOG=false
-AD_DN_BASE="${AD_DN_BASE:-}"
-AD_CN_TERM="${AD_CN_TERM:-}"
-ASF_ROLE_BASE="${ASF_ROLE_BASE:-}"
-AD_SVC_USER="${AD_SVC_USER:-}"
-AD_SVC_PASSWORD="${AD_SVC_PASSWORD:-}"
-RETAIN_LOGS_MAX_DAYS="${RETAIN_LOGS_MAX_DAYS:-}"
-AD_URI="${AD_URI:-}"
-LDAP_URI=""
+RETAIN_LOGS_MAX_DAYS=7
 
 declare -a AD_GROUPS=()
 declare -a CREATED_ROLES=()
+declare -a UPDATED_ROLES=()
 declare -a FAILED_ROLES=()
+
+load_env_file() {
+  local env_file="$SCRIPT_DIR/.env"
+  if [[ ! -f "$env_file" ]]; then
+    printf 'ERROR: Arquivo .env não encontrado em "%s".\n' "$SCRIPT_DIR" >&2
+    exit 1
+  fi
+
+  # shellcheck disable=SC2046
+  export $(grep -v '^\s*#' "$env_file" | grep -v '^\s*$' | xargs)
+
+  printf 'INFO: Arquivo .env carregado com sucesso.\n' >&2
+}
+
+validate_env_vars() {
+  local missing=()
+
+  [[ -z "${LOONAR_LDAP_MODE:-}" ]] && missing+=("LOONAR_LDAP_MODE")
+  [[ -z "${LOONAR_SUPERSET_BASE_ROLE:-}" ]] && missing+=("LOONAR_SUPERSET_BASE_ROLE")
+
+  case "${LOONAR_LDAP_MODE,,}" in
+    real)
+      [[ -z "${LOONAR_LDAP_SERVER_REAL:-}" ]] && missing+=("LOONAR_LDAP_SERVER_REAL")
+      [[ -z "${LOONAR_LDAP_BIND_DN_REAL:-}" ]] && missing+=("LOONAR_LDAP_BIND_DN_REAL")
+      [[ -z "${LOONAR_LDAP_BIND_PASSWORD_REAL:-}" ]] && missing+=("LOONAR_LDAP_BIND_PASSWORD_REAL")
+      [[ -z "${LOONAR_LDAP_GROUP_BASE_REAL:-}" ]] && missing+=("LOONAR_LDAP_GROUP_BASE_REAL")
+      ;;
+    mock)
+      if [[ -z "${LOONAR_LDAP_SERVER_MOCK:-}" && -z "${LOONAR_LDAP_SERVER_MOCK_INTERNAL:-}" ]]; then
+        missing+=("LOONAR_LDAP_SERVER_MOCK|LOONAR_LDAP_SERVER_MOCK_INTERNAL")
+      fi
+      [[ -z "${LOONAR_LDAP_BIND_DN_MOCK:-}" ]] && missing+=("LOONAR_LDAP_BIND_DN_MOCK")
+      [[ -z "${LOONAR_LDAP_BIND_PASSWORD_MOCK:-}" ]] && missing+=("LOONAR_LDAP_BIND_PASSWORD_MOCK")
+      [[ -z "${LOONAR_LDAP_GROUP_BASE_MOCK:-}" ]] && missing+=("LOONAR_LDAP_GROUP_BASE_MOCK")
+      ;;
+    *)
+      printf 'ERROR: Valor inválido para LOONAR_LDAP_MODE (use "real" ou "mock").\n' >&2
+      exit 1
+      ;;
+  esac
+
+  if (( ${#missing[@]} > 0 )); then
+    printf 'ERROR: Variáveis obrigatórias ausentes no .env: %s\n' "${missing[*]}" >&2
+    exit 1
+  fi
+}
 
 usage() {
   cat <<EOF
-Uso: $SCRIPT_NAME --ad_dn_base "<OU=...,DC=...,DC=...>" --ad_cn_term "<termo>"
-                  --asf_role_base "<role>" --ad_svc_user "<CN=...>"
-                  --ad_svc_password "<senha>" --retain_logs_max_days "<dias>"
-                  [--ad_uri "<ldaps://host>"] [--log_path "/dir/logs"]
+Uso: $SCRIPT_NAME [--retain_logs_max_days "<dias>"] [--log_path "/dir/logs"] \
                   [--debug] [--show_log]
 
-Parâmetros:
-  --ad_dn_base             Base DN no Active Directory (ex: OU=04-CLIENTES,DC=yourcompany,DC=local)
-  --ad_cn_term             Termo obrigatório no CN do grupo (alias: --ad_cn_hasterm)
-  --asf_role_base          Role do Superset usada como modelo de permissões
-  --ad_svc_user            DN completo do usuário de serviço
-  --ad_svc_password        Senha do usuário de serviço
-  --retain_logs_max_days   Dias para retenção dos logs (inteiro > 0)
-  --ad_uri                 URI do servidor LDAP (ex: ldaps://ldap.example.com)
-  --log_path               Diretório onde os logs serão gravados
-  --debug                  Registra no log a saída completa dos comandos
-  --show_log               Exibe as mensagens também no stdout
-  -h, --help               Mostra esta ajuda
+Variáveis carregadas do .env:
+  LOONAR_LDAP_MODE               Define se usa LDAP real ou mock
+  LOONAR_LDAP_SERVER_REAL        URI/host do LDAP real
+  LOONAR_LDAP_BIND_DN_REAL       Bind DN do LDAP real
+  LOONAR_LDAP_BIND_PASSWORD_REAL Senha do LDAP real
+  LOONAR_LDAP_GROUP_BASE_REAL    Base DN de grupos (real)
+  LOONAR_LDAP_USE_SSL_REAL       true|false
 
-Observação: cada parâmetro pode ser omitido caso a variável de ambiente de mesmo nome (ex: AD_DN_BASE, AD_URI, LOG_PATH) esteja definida.
+  LOONAR_LDAP_SERVER_MOCK        URI/host do LDAP mock
+  LOONAR_LDAP_SERVER_MOCK_INTERNAL URI/host interno do LDAP mock (prioridade)
+  LOONAR_LDAP_BIND_DN_MOCK       Bind DN do LDAP mock
+  LOONAR_LDAP_BIND_PASSWORD_MOCK Senha do LDAP mock
+  LOONAR_LDAP_GROUP_BASE_MOCK    Base DN de grupos (mock)
+  LOONAR_LDAP_USE_SSL_MOCK       true|false
+
+  LOONAR_SUPERSET_BASE_ROLE      Role base do Superset para copiar permissões (obrigatória)
+  LOONAR_LDAP_CN_TERM            Termo opcional que deve aparecer no CN dos grupos (filtro)
+
+Parâmetros opcionais:
+  --retain_logs_max_days  Dias de retenção dos logs (padrão 7)
+  --log_path              Diretório onde os logs serão gravados (padrão: diretório do script)
+  --debug                 Registra no log a saída completa dos comandos
+  --show_log              Exibe as mensagens também no stdout
+  -h, --help              Mostra esta ajuda
 EOF
 }
 
@@ -81,56 +128,6 @@ expect_value() {
 parse_args() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --ad_dn_base)
-        local value="${2-}"
-        expect_value "$1" "$value"
-        AD_DN_BASE="$value"
-        shift 2
-        ;;
-      --ad_dn_base=*)
-        AD_DN_BASE="${1#*=}"
-        shift
-        ;;
-      --ad_cn_term|--ad_cn_hasterm)
-        local value="${2-}"
-        expect_value "$1" "$value"
-        AD_CN_TERM="$value"
-        shift 2
-        ;;
-      --ad_cn_term=*|--ad_cn_hasterm=*)
-        AD_CN_TERM="${1#*=}"
-        shift
-        ;;
-      --asf_role_base)
-        local value="${2-}"
-        expect_value "$1" "$value"
-        ASF_ROLE_BASE="$value"
-        shift 2
-        ;;
-      --asf_role_base=*)
-        ASF_ROLE_BASE="${1#*=}"
-        shift
-        ;;
-      --ad_svc_user)
-        local value="${2-}"
-        expect_value "$1" "$value"
-        AD_SVC_USER="$value"
-        shift 2
-        ;;
-      --ad_svc_user=*)
-        AD_SVC_USER="${1#*=}"
-        shift
-        ;;
-      --ad_svc_password)
-        local value="${2-}"
-        expect_value "$1" "$value"
-        AD_SVC_PASSWORD="$value"
-        shift 2
-        ;;
-      --ad_svc_password=*)
-        AD_SVC_PASSWORD="${1#*=}"
-        shift
-        ;;
       --retain_logs_max_days)
         local value="${2-}"
         expect_value "$1" "$value"
@@ -141,24 +138,6 @@ parse_args() {
         RETAIN_LOGS_MAX_DAYS="${1#*=}"
         shift
         ;;
-      --ad_uri)
-        local value="${2-}"
-        expect_value "$1" "$value"
-        AD_URI="$value"
-        shift 2
-        ;;
-      --ad_uri=*)
-        AD_URI="${1#*=}"
-        shift
-        ;;
-      --debug)
-        DEBUG=true
-        shift
-        ;;
-      --show_log)
-        SHOW_LOG=true
-        shift
-        ;;
       --log_path)
         local value="${2-}"
         expect_value "$1" "$value"
@@ -167,6 +146,14 @@ parse_args() {
         ;;
       --log_path=*)
         LOG_PATH="${1#*=}"
+        shift
+        ;;
+      --debug)
+        DEBUG=true
+        shift
+        ;;
+      --show_log)
+        SHOW_LOG=true
         shift
         ;;
       -h|--help)
@@ -181,29 +168,6 @@ parse_args() {
 }
 
 validate_params() {
-  local missing=()
-  for var in AD_DN_BASE AD_CN_TERM ASF_ROLE_BASE AD_SVC_USER AD_SVC_PASSWORD RETAIN_LOGS_MAX_DAYS; do
-    if [[ -z "${!var:-}" ]]; then
-      missing+=("$var")
-    fi
-  done
-  if (( ${#missing[@]} > 0 )); then
-    exit_with_help "Parâmetros obrigatórios ausentes: ${missing[*]}"
-  fi
-
-  AD_DN_BASE="$(printf '%s' "$AD_DN_BASE" | sed 's/,[[:space:]]*/,/g')"
-  if [[ ! "$AD_DN_BASE" =~ ^(OU|DC)=[^,=]+(,(OU|CN|DC)=[^,=]+)+$ ]]; then
-    exit_with_help "Valor inválido para --ad_dn_base."
-  fi
-  if [[ ! "$AD_CN_TERM" =~ ^[-[:alnum:]_]+$ ]]; then
-    exit_with_help "Valor inválido para --ad_cn_term (permitido letras, números, -, _)."
-  fi
-  if [[ ! "$ASF_ROLE_BASE" =~ ^[[:alnum:]_.-]+$ ]]; then
-    exit_with_help "Valor inválido para --asf_role_base."
-  fi
-  if [[ ! "$AD_SVC_USER" =~ ^CN=.* ]]; then
-    exit_with_help "Valor inválido para --ad_svc_user (DN deve iniciar com CN=)."
-  fi
   if [[ ! "$RETAIN_LOGS_MAX_DAYS" =~ ^[0-9]+$ ]] || (( RETAIN_LOGS_MAX_DAYS <= 0 )); then
     exit_with_help "O parâmetro --retain_logs_max_days deve ser um inteiro positivo."
   fi
@@ -222,30 +186,48 @@ ensure_container_running() {
   fi
 }
 
-derive_ldap_uri() {
-  if [[ -n "${AD_URI:-}" ]]; then
-    LDAP_URI="$AD_URI"
-    log INFO "LDAP URI definido a partir do parâmetro/variável AD_URI."
+normalize_ldap_uri() {
+  local server="$1"
+  local use_ssl="$2"
+
+  if [[ "$server" =~ ^ldaps?:// ]]; then
+    echo "$server"
     return
   fi
 
-  local part
-  local domain_parts=()
-  IFS=',' read -ra parts <<<"$AD_DN_BASE"
-  for part in "${parts[@]}"; do
-    part="$(printf '%s' "$part" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
-    if [[ "$part" =~ ^[Dd][Cc]=(.*)$ ]]; then
-      domain_parts+=("${BASH_REMATCH[1],,}")
-    fi
-  done
-  if (( ${#domain_parts[@]} == 0 )); then
-    exit_with_help "Não foi possível derivar o domínio a partir de --ad_dn_base."
+  local scheme="ldap"
+  if [[ "${use_ssl,,}" == "true" ]]; then
+    scheme="ldaps"
   fi
-  local domain
-  domain=$(IFS=.; printf '%s' "${domain_parts[*]}")
-  local scheme="${AD_LDAP_SCHEME:-ldaps}"
-  LDAP_URI="${scheme}://${domain}"
-  log INFO "LDAP URI definido automaticamente como '${LDAP_URI}'."
+  echo "${scheme}://${server}"
+}
+
+resolve_ldap_context() {
+  local LDAP_URI LDAP_BIND_DN LDAP_BIND_PASSWORD LDAP_GROUP_BASE
+
+  case "${LOONAR_LDAP_MODE,,}" in
+    real)
+      LDAP_URI="$(normalize_ldap_uri "$LOONAR_LDAP_SERVER_REAL" "${LOONAR_LDAP_USE_SSL_REAL:-false}")"
+      LDAP_BIND_DN="$LOONAR_LDAP_BIND_DN_REAL"
+      LDAP_BIND_PASSWORD="$LOONAR_LDAP_BIND_PASSWORD_REAL"
+      LDAP_GROUP_BASE="$LOONAR_LDAP_GROUP_BASE_REAL"
+      ;;
+    mock)
+      local server_source="$LOONAR_LDAP_SERVER_MOCK"
+      if [[ -n "${LOONAR_LDAP_SERVER_MOCK_INTERNAL:-}" ]]; then
+        server_source="$LOONAR_LDAP_SERVER_MOCK_INTERNAL"
+      fi
+      LDAP_URI="$(normalize_ldap_uri "$server_source" "${LOONAR_LDAP_USE_SSL_MOCK:-false}")"
+      LDAP_BIND_DN="$LOONAR_LDAP_BIND_DN_MOCK"
+      LDAP_BIND_PASSWORD="$LOONAR_LDAP_BIND_PASSWORD_MOCK"
+      LDAP_GROUP_BASE="$LOONAR_LDAP_GROUP_BASE_MOCK"
+      ;;
+    *)
+      exit_with_help "Modo LDAP inválido: ${LOONAR_LDAP_MODE}."
+      ;;
+  esac
+
+  log INFO "Modo LDAP: ${LOONAR_LDAP_MODE} | URI: ${LDAP_URI} | Base: ${LDAP_GROUP_BASE}"
 }
 
 cleanup_old_logs() {
@@ -288,7 +270,7 @@ configure_log_path() {
 
 ensure_base_role_exists() {
   local output=""
-  if ! output=$(docker exec -i superset_app python3 - "$ASF_ROLE_BASE" <<'PY'
+  if ! output=$(docker exec -i superset_app python3 - "$LOONAR_SUPERSET_BASE_ROLE" <<'PY'
 from __future__ import annotations
 
 import sys
@@ -312,63 +294,75 @@ if __name__ == "__main__":
     main(sys.argv[1])
 PY
 ); then
-    log ERROR "Role base '${ASF_ROLE_BASE}' não encontrada. Detalhes: ${output:-sem saída}."
+    log ERROR "Role base '${LOONAR_SUPERSET_BASE_ROLE}' não encontrada. Detalhes: ${output:-sem saída}."
     exit 1
   fi
   debug_block "verificação role base >> " "$output"
-  log INFO "Role base '${ASF_ROLE_BASE}' confirmada no Superset."
+  log INFO "Role base '${LOONAR_SUPERSET_BASE_ROLE}' confirmada no Superset."
 }
 
 fetch_ad_groups() {
-  local filter="(&(objectClass=group)(cn=*${AD_CN_TERM}*))"
+  local LDAP_URI LDAP_BIND_DN LDAP_BIND_PASSWORD LDAP_GROUP_BASE
+  resolve_ldap_context
+
+  local filter="(objectClass=group)"
+  if [[ -n "${LOONAR_LDAP_CN_TERM:-}" ]]; then
+    filter="(&(objectClass=group)(cn=*${LOONAR_LDAP_CN_TERM}*))"
+  fi
   local raw_output=""
-  if ! raw_output=$(LDAPTLS_REQCERT=allow ldapsearch -LLL -x -H "$LDAP_URI" -D "$AD_SVC_USER" -w "$AD_SVC_PASSWORD" -b "$AD_DN_BASE" "$filter" cn); then
-    log ERROR "Falha ao consultar grupos no Active Directory."
+  if ! raw_output=$(LDAPTLS_REQCERT=allow ldapsearch -LLL -x -H "$LDAP_URI" -D "$LDAP_BIND_DN" -w "$LDAP_BIND_PASSWORD" -b "$LDAP_GROUP_BASE" "$filter" cn); then
+    log ERROR "Falha ao consultar grupos no LDAP (${LOONAR_LDAP_MODE})."
     exit 1
   fi
   debug_block "ldapsearch >> " "$raw_output"
   mapfile -t AD_GROUPS < <(printf '%s\n' "$raw_output" | awk -F': ' '/^cn: / {print $2}' | sort -u)
-  log INFO "Total de grupos encontrados com o termo '${AD_CN_TERM}': ${#AD_GROUPS[@]}."
+  local filtro_desc="todos"
+  if [[ -n "${LOONAR_LDAP_CN_TERM:-}" ]]; then
+    filtro_desc="cn contendo '${LOONAR_LDAP_CN_TERM}'"
+  fi
+  log INFO "Total de grupos encontrados (${filtro_desc}): ${#AD_GROUPS[@]}."
 }
 
 sync_role_permissions() {
   local role_name="$1"
   local output=""
-  if ! output=$(docker exec -i superset_app python3 - "$ASF_ROLE_BASE" "$role_name" <<'PY'
+  if ! output=$(docker exec -i superset_app python3 - "$LOONAR_SUPERSET_BASE_ROLE" "$role_name" <<'PY'
 from __future__ import annotations
 
 import sys
-from typing import Optional
+from typing import Optional, Tuple
 
 from superset.app import create_app
 from superset.extensions import db, security_manager
 
 
-def sync_role(base_role_name: str, target_role_name: str) -> str:
+def sync_role(base_role_name: str, target_role_name: str) -> Tuple[str, str]:
     app = create_app()
     with app.app_context():
         base_role = security_manager.find_role(base_role_name)
         if base_role is None:
             raise ValueError(f"Role base '{base_role_name}' não encontrada.")
         target_role = security_manager.find_role(target_role_name)
+        created = False
         if target_role is None:
             target_role = security_manager.add_role(target_role_name)
+            created = True
         target_role.permissions = list(base_role.permissions)
         db.session.add(target_role)
         db.session.commit()
-        return target_role.name
+        return target_role.name, "created" if created else "updated"
 
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
         raise SystemExit("Uso: clone_role.py <role_base> <role_destino>")
     try:
-        synced = sync_role(sys.argv[1], sys.argv[2])
+        name, status = sync_role(sys.argv[1], sys.argv[2])
     except ValueError as exc:
         db.session.rollback()
         print(str(exc), file=sys.stderr)
         raise SystemExit(1) from exc
-    print(f"ROLE_SYNC_OK:{synced}")
+    print(f"ROLE_SYNC_OK:{name}:{status}")
 PY
 ); then
     log ERROR "Erro ao sincronizar role '${role_name}'. Detalhes: ${output:-sem saída}."
@@ -376,12 +370,19 @@ PY
     return 1
   fi
   debug_block "docker exec >> " "$output"
-  if [[ "$output" == ROLE_SYNC_OK:* ]]; then
-    CREATED_ROLES+=("$role_name")
-    log INFO "Role '${role_name}' sincronizada com sucesso."
+  if [[ "$output" =~ ^ROLE_SYNC_OK:([^:]+):([^:]+)$ ]]; then
+    local name="${BASH_REMATCH[1]}"
+    local status="${BASH_REMATCH[2]}"
+    if [[ "$status" == "created" ]]; then
+      CREATED_ROLES+=("$name")
+      log INFO "Role '${name}' criada e sincronizada."
+    else
+      UPDATED_ROLES+=("$name")
+      log INFO "Role '${name}' atualizada."
+    fi
   else
     log INFO "Role '${role_name}' processada. Saída: $output"
-    CREATED_ROLES+=("$role_name")
+    UPDATED_ROLES+=("$role_name")
   fi
   return 0
 }
@@ -398,7 +399,10 @@ process_groups() {
 summarize() {
   log INFO "Roles processadas: ${#AD_GROUPS[@]}"
   if (( ${#CREATED_ROLES[@]} > 0 )); then
-    log INFO "Roles sincronizadas: ${CREATED_ROLES[*]}"
+    log INFO "Roles criadas: ${CREATED_ROLES[*]}"
+  fi
+  if (( ${#UPDATED_ROLES[@]} > 0 )); then
+    log INFO "Roles atualizadas (já existiam): ${UPDATED_ROLES[*]}"
   fi
   if (( ${#FAILED_ROLES[@]} > 0 )); then
     log ERROR "Falha ao sincronizar as roles: ${FAILED_ROLES[*]}"
@@ -408,11 +412,8 @@ summarize() {
 }
 
 main() {
-  if [[ $# -eq 0 ]]; then
-    usage >&2
-    exit 1
-  fi
-
+  load_env_file
+  validate_env_vars
   parse_args "$@"
   configure_log_path
   trap 'log ERROR "Execução interrompida."; exit 1' INT TERM
@@ -421,9 +422,8 @@ main() {
   ensure_command ldapsearch
   ensure_command docker
   ensure_container_running
-  derive_ldap_uri
 
-  log INFO "Iniciando sincronização (container=superset_app, role base='${ASF_ROLE_BASE}', filtro='${AD_CN_TERM}', base DN='${AD_DN_BASE}')."
+  log INFO "Iniciando sincronização (container=superset_app, modo='${LOONAR_LDAP_MODE}', role base='${LOONAR_SUPERSET_BASE_ROLE}', filtro='${LOONAR_LDAP_CN_TERM:-todos}')."
 
   ensure_base_role_exists
   fetch_ad_groups
@@ -436,5 +436,7 @@ main() {
   process_groups
   summarize
 }
+
+main "$@"
 
 main "$@"
