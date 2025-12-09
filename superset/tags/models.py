@@ -37,7 +37,7 @@ from sqlalchemy.orm import relationship, sessionmaker
 from sqlalchemy.orm.mapper import Mapper
 from sqlalchemy.schema import UniqueConstraint
 
-from superset import security_manager
+from superset.extensions import security_manager
 from superset.models.helpers import AuditMixinNullable
 
 if TYPE_CHECKING:
