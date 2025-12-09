@@ -41,13 +41,16 @@ awk -v gen_secret="$(random_secret)" -v gen_pass="$(random_password)" -v gen_map
       rotatable=1
       next
     }
-    else if ($0 ~ /^#/) rotatable=0
+    else if ($0 ~ /^# /) rotatable=0
+    else if ($0 ~ /^[A-Z_]+=[^=]*$/ && $0 !~ /=__ROTATE_ME__/) rotatable=0
 
-    if (rotatable && $0 ~ /=__ROTATE_ME__/) {
+    if (rotatable && $0 ~ /=__ROTATE_ME__$/) {
       var=gensub(/=.*/, "", "g", $0)
       if (var ~ /SUPERSET_SECRET_KEY/) print var "=" gen_secret
-      else if (var ~ /(PASSWORD|USER)/) print var "=" gen_pass
-      else if (var ~ /MAPBOX_API_KEY/) print var "=" gen_mapbox
+      else if (var ~ /(PASSWORD|MAPBOX_API_KEY)/) {
+        if (var ~ /MAPBOX_API_KEY/) print var "=" gen_mapbox
+        else print var "=" gen_pass
+      }
       else print $0
       rotatable=0
     } else print $0
