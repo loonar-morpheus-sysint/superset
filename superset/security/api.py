@@ -101,6 +101,25 @@ class RolesResponseSchema(PermissiveSchema):
 guest_token_create_schema = GuestTokenCreateSchema()
 
 
+class PermissionResourceSchema(PermissiveSchema):
+    id = fields.Integer()
+    permission = fields.Nested(
+        lambda: {
+            "name": fields.String(),
+        }
+    )
+    view_menu = fields.Nested(
+        lambda: {
+            "name": fields.String(),
+        }
+    )
+
+
+class PermissionsResourcesResponseSchema(PermissiveSchema):
+    count = fields.Integer()
+    result = fields.List(fields.Nested(PermissionResourceSchema))
+
+
 class SecurityRestApi(BaseSupersetApi):
     resource_name = "security"
     allow_browser_login = True
@@ -194,6 +213,70 @@ class SecurityRestApi(BaseSupersetApi):
             return self.response_400(message=error.message)
         except ValidationError as error:
             return self.response_400(message=error.messages)
+
+    @expose("/permissions-resources/", methods=("GET",))
+    @event_logger.log_this
+    @protect()
+    @safe
+    @statsd_metrics
+    @permission_name("read")
+    def permissions_resources(self) -> Response:
+        """Get all permission-view_menu combinations.
+        ---
+        get:
+          summary: Get all permission resources
+          description: Returns a list of all permission-view_menu combinations
+          parameters:
+            - in: query
+              name: page
+              schema:
+                type: integer
+                default: 0
+            - in: query
+              name: page_size
+              schema:
+                type: integer
+                default: 1000
+          responses:
+            200:
+              description: Successfully retrieved permissions
+              content:
+                application/json:
+                  schema: PermissionsResourcesResponseSchema
+            401:
+              $ref: '#/components/responses/401'
+            500:
+              $ref: '#/components/responses/500'
+        """
+        try:
+            from flask_appbuilder.security.sqla.models import PermissionView
+
+            page = request.args.get("page", 0, type=int)
+            page_size = request.args.get("page_size", 1000, type=int)
+
+            query = (
+                db.session.query(PermissionView)
+                .order_by(PermissionView.id)
+                .offset(page * page_size)
+                .limit(page_size)
+            )
+
+            permissions = query.all()
+            count = db.session.query(PermissionView).count()
+
+            result = [
+                {
+                    "id": perm.id,
+                    "permission": {"name": perm.permission.name},
+                    "view_menu": {"name": perm.view_menu.name},
+                }
+                for perm in permissions
+            ]
+
+            return self.response(200, result=result, count=count)
+        except Exception as e:
+            logger.exception("Error fetching permissions resources")
+            return self.response_500(message=str(e))
 
 
 class RoleRestAPI(BaseSupersetApi):
