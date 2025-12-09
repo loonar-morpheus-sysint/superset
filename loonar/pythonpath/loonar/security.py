@@ -25,6 +25,7 @@ from flask_appbuilder.security.manager import (
     AUTH_OAUTH,
     AUTH_REMOTE_USER,
 )
+from flask_appbuilder.security.sqla.apis import GroupApi
 from flask_appbuilder.security.sqla.models import User
 from flask_appbuilder.security.views import AuthDBView
 from flask_babel import gettext as _
@@ -86,6 +87,7 @@ class LoonarAuthDBView(AuthDBView):
 
 class LoonarSecurityManager(SupersetSecurityManager):
     authdbview = LoonarAuthDBView
+    group_api = GroupApi  # Enable FAB Groups REST API
 
     def __init__(self, appbuilder: AppBuilder) -> None:
         super().__init__(appbuilder)
