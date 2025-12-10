@@ -138,27 +138,35 @@ class LoonarSecurityManager(SupersetSecurityManager):
     def register_views(self) -> None:
         """Register security views while keeping Superset's menu customizations.
 
-        This implementation follows the same pattern as SupersetSecurityManager
-        to ensure all APIs and views are properly registered.
+        This implementation registers our custom auth view first, then calls
+        the Flask-AppBuilder SecurityManager base class to register all other
+        views and APIs, skipping SupersetSecurityManager to avoid conflicts.
         """
         if not current_app.config.get("FAB_ADD_SECURITY_VIEWS", True):
             return
 
-        # Register all base security views from Flask-AppBuilder
-        # This ensures all APIs (including RoleRestAPI) are properly registered
-        super().register_views()
-
-        # CRITICAL: Override auth_view to use our custom login form
-        # This must be done AFTER super().register_views() to ensure our view
-        # takes precedence over SupersetAuthView which is registered by
-        # SupersetSecurityManager.register_views()
+        # Register our custom auth and register views BEFORE calling base class
+        # This ensures our views take precedence over SupersetAuthView
         self.auth_view = self.authdbview()
         self.appbuilder.add_view_no_menu(self.auth_view)
 
-        # Remove only the MENU ITEMS and VIEW PAGES (not APIs) that we don't want
+        if self.auth_user_registration:
+            from superset.views.auth import SupersetRegisterUserView
+
+            self.registeruser_view = self.appbuilder.add_view_no_menu(
+                SupersetRegisterUserView
+            )
+
+        # Call Flask-AppBuilder SecurityManager.register_views() directly
+        # This skips SupersetSecurityManager.register_views() to avoid
+        # registering SupersetAuthView which would conflict with ours
+        from flask_appbuilder.security.sqla.manager import SecurityManager
+
+        SecurityManager.register_views(self)
+
+        # Remove the duplicate MENU views (not APIs) that we don't want
         # This follows the same pattern as SupersetSecurityManager
         for view in list(self.appbuilder.baseviews):
-            # Only remove views with specific route_base that are NOT APIs
             if (
                 isinstance(view, self.rolemodelview.__class__)
                 and hasattr(view, "route_base")
