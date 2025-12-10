@@ -19,12 +19,6 @@ from typing import List, Optional
 from flask import current_app, flash, redirect, request, Response
 from flask_appbuilder import AppBuilder, expose
 from flask_appbuilder.security.forms import LoginForm_db
-from flask_appbuilder.security.manager import (
-    AUTH_DB,
-    AUTH_LDAP,
-    AUTH_OAUTH,
-    AUTH_REMOTE_USER,
-)
 from flask_appbuilder.security.sqla.models import User
 from flask_appbuilder.security.views import AuthDBView
 from flask_babel import gettext as _
@@ -142,130 +136,30 @@ class LoonarSecurityManager(SupersetSecurityManager):
             connection.unbind()
 
     def register_views(self) -> None:
-        """Register security views while keeping Superset's menu customizations."""
+        """Register security views while keeping Superset's menu customizations.
+
+        This implementation follows the same pattern as SupersetSecurityManager
+        to ensure all APIs and views are properly registered.
+        """
         if not current_app.config.get("FAB_ADD_SECURITY_VIEWS", True):
             return
 
-        self._register_base_security_views()
-        self._register_auth_view()
-        self._register_user_and_role_views()
-        self._register_optional_views()
-        self._cleanup_duplicate_views()
-        self._cleanup_security_menu()
+        # Register all base security views from Flask-AppBuilder
+        # This ensures all APIs (including RoleRestAPI) are properly registered
+        super().register_views()
 
-    def _register_base_security_views(self) -> None:
-        """Register API and user info views."""
-        self.appbuilder.add_api(self.security_api)
+        # Remove only the MENU ITEMS and VIEW PAGES (not APIs) that we don't want
+        # This follows the same pattern as SupersetSecurityManager
+        for view in list(self.appbuilder.baseviews):
+            # Only remove views with specific route_base that are NOT APIs
+            if (
+                isinstance(view, self.rolemodelview.__class__)
+                and hasattr(view, "route_base")
+                and view.route_base in ["/roles", "/users", "/groups", "/registrations"]
+            ):
+                self.appbuilder.baseviews.remove(view)
 
-        if self.auth_user_registration:
-            if self.auth_type == AUTH_DB:
-                self.registeruser_view = self.registeruserdbview()
-            elif self.auth_type == AUTH_OAUTH:
-                self.registeruser_view = self.registeruseroauthview()
-            if self.registeruser_view:
-                self.appbuilder.add_view_no_menu(self.registeruser_view)
-
-        self.appbuilder.add_view_no_menu(self.userinfoeditview())
-
-    def _register_auth_view(self) -> None:
-        """Register authentication view based on auth type."""
-        if self.auth_type == AUTH_DB:
-            self.user_view = self.userdbmodelview
-            self.auth_view = self.authdbview()
-            self.appbuilder.add_view_no_menu(self.resetpasswordview())
-            self.appbuilder.add_view_no_menu(self.resetmypasswordview())
-        elif self.auth_type == AUTH_LDAP:
-            self.user_view = self.userldapmodelview
-            self.auth_view = self.authldapview()
-        elif self.auth_type == AUTH_OAUTH:
-            self.user_view = self.useroauthmodelview
-            self.auth_view = self.authoauthview()
-        elif self.auth_type == AUTH_REMOTE_USER:
-            self.user_view = self.userremoteusermodelview
-            self.auth_view = self.authremoteuserview()
-
-        self.appbuilder.add_view_no_menu(self.auth_view)
-
-        if self.is_auth_limited:
-            self.limiter.limit(self.auth_rate_limit, methods=["POST"])(
-                self.auth_view.blueprint
-            )
-
-    def _register_user_and_role_views(self) -> None:
-        """Register user and role management views."""
-        self.user_view = self.appbuilder.add_view(
-            self.user_view,
-            "List Users",
-            icon="fa-user",
-            label=_("List Users"),
-            category="Security",
-            category_icon="fa-cogs",
-            category_label=_("Security"),
-        )
-
-        role_view = self.appbuilder.add_view(
-            self.rolemodelview,
-            "List Roles",
-            icon="fa-user-gear",
-            label=_("List Roles"),
-            category="Security",
-            category_icon="fa-cogs",
-        )
-        role_view.related_views = [self.user_view.__class__]
-
-        self.appbuilder.add_view(
-            self.groupmodelview,
-            "List Groups",
-            icon="fa-group",
-            label=_("List Groups"),
-            category="Security",
-            category_icon="fa-cogs",
-        )
-
-    def _register_optional_views(self) -> None:
-        """Register optional views like user stats and permissions."""
-        if self.userstatschartview:
-            self.appbuilder.add_view(
-                self.userstatschartview,
-                "User's Statistics",
-                icon="fa-bar-chart-o",
-                label=_("User's Statistics"),
-                category="Security",
-            )
-        if self.auth_user_registration:
-            self.appbuilder.add_view(
-                self.registerusermodelview,
-                "User Registrations",
-                icon="fa-user-plus",
-                label=_("User Registrations"),
-                category="Security",
-            )
-        self.appbuilder.menu.add_separator("Security")
-        if current_app.config.get("FAB_ADD_SECURITY_PERMISSION_VIEW", True):
-            self.appbuilder.add_view(
-                self.permissionmodelview,
-                "Base Permissions",
-                icon="fa-lock",
-                label=_("Base Permissions"),
-                category="Security",
-            )
-        if current_app.config.get("FAB_ADD_SECURITY_VIEW_MENU_VIEW", True):
-            self.appbuilder.add_view(
-                self.viewmenumodelview,
-                "Views/Menus",
-                icon="fa-list-alt",
-                label=_("Views/Menus"),
-                category="Security",
-            )
-
-    def _cleanup_duplicate_views(self) -> None:
-        """Remove duplicate views from appbuilder."""
-        # Removed: This was incorrectly removing views including RoleRestAPI
-        # The cleanup is not needed as Flask-AppBuilder handles duplicate routes
-        pass
-
-    def _cleanup_security_menu(self) -> None:
-        """Clean up security menu items."""
+        # Clean up security menu items
         security_menu = next(
             (m for m in self.appbuilder.menu.get_list() if m.name == "Security"), None
         )
