@@ -148,6 +148,13 @@ class LoonarSecurityManager(SupersetSecurityManager):
         # This ensures all APIs (including RoleRestAPI) are properly registered
         super().register_views()
 
+        # CRITICAL: Override auth_view to use our custom login form
+        # This must be done AFTER super().register_views() to ensure our view
+        # takes precedence over SupersetAuthView which is registered by
+        # SupersetSecurityManager.register_views()
+        self.auth_view = self.authdbview()
+        self.appbuilder.add_view_no_menu(self.auth_view)
+
         # Remove only the MENU ITEMS and VIEW PAGES (not APIs) that we don't want
         # This follows the same pattern as SupersetSecurityManager
         for view in list(self.appbuilder.baseviews):
