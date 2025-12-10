@@ -270,7 +270,7 @@ class SupersetAppInitializer:  # pylint: disable=too-many-public-methods
         appbuilder.add_api(LogRestApi)
 
         # Add FAB Group API for groups management
-        if appbuilder.get_app.config.get("FAB_ADD_SECURITY_API"):
+        if appbuilder.app.config.get("FAB_ADD_SECURITY_API"):
             from flask_appbuilder.security.sqla.apis import GroupApi
 
             appbuilder.add_api(GroupApi)
