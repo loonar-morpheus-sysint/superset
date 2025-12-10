@@ -195,6 +195,91 @@ class SecurityRestApi(BaseSupersetApi):
         except ValidationError as error:
             return self.response_400(message=error.messages)
 
+    @expose("/permissions-resources/", methods=("GET",))
+    @event_logger.log_this
+    @protect()
+    @safe
+    @statsd_metrics
+    @permission_name("read")
+    def permissions_resources(self) -> Response:
+        """Get all permission-view_menu combinations.
+        ---
+        get:
+          summary: Get all permission resources
+          description: Returns a list of all permission-view_menu combinations
+          parameters:
+            - in: query
+              name: page
+              schema:
+                type: integer
+                default: 0
+            - in: query
+              name: page_size
+              schema:
+                type: integer
+                default: 100
+          responses:
+            200:
+              description: Successfully retrieved permissions
+              content:
+                application/json:
+                  schema:
+                    type: object
+                    properties:
+                      count:
+                        type: integer
+                      result:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id:
+                              type: integer
+                            permission:
+                              type: object
+                              properties:
+                                name:
+                                  type: string
+                            view_menu:
+                              type: object
+                              properties:
+                                name:
+                                  type: string
+            401:
+              $ref: '#/components/responses/401'
+            500:
+              $ref: '#/components/responses/500'
+        """
+        try:
+            from flask_appbuilder.security.sqla.models import PermissionView
+
+            page = request.args.get("page", 0, type=int)
+            page_size = request.args.get("page_size", 100, type=int)
+
+            # Get all permission-view_menu combinations
+            count = db.session.query(PermissionView).count()
+
+            permission_views = (
+                db.session.query(PermissionView)
+                .offset(page * page_size)
+                .limit(page_size)
+                .all()
+            )
+
+            result = [
+                {
+                    "id": pv.id,
+                    "permission": {"name": pv.permission.name},
+                    "view_menu": {"name": pv.view_menu.name},
+                }
+                for pv in permission_views
+            ]
+
+            return self.response(200, count=count, result=result)
+        except Exception as ex:
+            logger.error(f"Error fetching permissions-resources: {ex}")
+            return self.response_500(message=str(ex))
+
 
 class RoleRestAPI(BaseSupersetApi):
     """
