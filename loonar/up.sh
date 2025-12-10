@@ -184,6 +184,50 @@ select_ldap_mode() {
     fi
 }
 
+select_init_mode() {
+    local init_marker="$PROJECT_ROOT/.superset_initialized"
+    local already_initialized=false
+
+    if [ -f "$init_marker" ]; then
+        already_initialized=true
+    fi
+
+    echo "🔧 Modo de inicialização do banco de dados:"
+    if [ "$already_initialized" = true ]; then
+        echo "   ℹ️  Superset já foi inicializado anteriormente"
+        echo "   1) Pular inicialização (usar banco existente)"
+        echo "   2) Forçar reinicialização (executar superset db upgrade e criar admin)"
+    else
+        echo "   ℹ️  Primeira execução detectada"
+        echo "   1) Executar inicialização (recomendado)"
+        echo "   2) Pular inicialização (avançado - assumir que banco já está pronto)"
+    fi
+
+    read -r -p "Escolha o modo desejado (Enter para opção 1): " option || true
+
+    export INIT_MODE="skip"
+    case "$option" in
+        2)
+            if [ "$already_initialized" = true ]; then
+                export INIT_MODE="force"
+                echo "✅ Será executada a reinicialização do banco"
+            else
+                export INIT_MODE="skip"
+                echo "⚠️  Pulando inicialização - certifique-se que o banco está pronto"
+            fi
+            ;;
+        *)
+            if [ "$already_initialized" = true ]; then
+                export INIT_MODE="skip"
+                echo "✅ Inicialização será pulada (banco já existe)"
+            else
+                export INIT_MODE="run"
+                echo "✅ Será executada a inicialização do banco"
+            fi
+            ;;
+    esac
+}
+
 sync_mock_server_uri() {
     local superset_host
     superset_host=$(get_env_value "SUPERSET_HOST" "localhost")
@@ -213,42 +257,48 @@ check_superset_initialization() {
     # Marcar arquivo de inicialização
     local init_marker="$PROJECT_ROOT/.superset_initialized"
 
-    # Verificar se já foi inicializado e se o banco de dados existe
-    if [ ! -f "$init_marker" ]; then
+    # Verificar se deve executar inicialização baseado na escolha do usuário
+    if [ "$INIT_MODE" = "skip" ]; then
+        echo "⏭️  Pulando inicialização do banco de dados"
+        return 0
+    fi
+
+    if [ "$INIT_MODE" = "force" ]; then
+        echo "🔧 Forçando reinicialização do Superset..."
+        rm -f "$init_marker"
+    elif [ "$INIT_MODE" = "run" ]; then
         echo "🔧 Primeira execução detectada - inicializando Superset..."
+    fi
 
-        # Inicializar com profile 'init'
-        echo "🔄 Executando superset_init com profile init..."
-        docker compose "${COMPOSE_ARGS[@]}" --profile init up -d superset_init
+    # Inicializar com profile 'init'
+    echo "🔄 Executando superset_init com profile init..."
+    docker compose "${COMPOSE_ARGS[@]}" --profile init up -d superset_init
 
-        # Capturar o container criado para conseguir ler o exit code depois
-        init_container_id=$(docker compose "${COMPOSE_ARGS[@]}" ps -q superset_init | head -n1)
-        if [ -z "$init_container_id" ]; then
-            echo "❌ Não foi possível identificar o container superset_init"
-            exit 1
-        fi
+    # Capturar o container criado para conseguir ler o exit code depois
+    init_container_id=$(docker compose "${COMPOSE_ARGS[@]}" ps -q superset_init | head -n1)
+    if [ -z "$init_container_id" ]; then
+        echo "❌ Não foi possível identificar o container superset_init"
+        exit 1
+    fi
 
-        # Aguardar conclusão
-        echo "⏳ Aguardando inicialização do banco de dados..."
-        docker logs -f "$init_container_id"
+    # Aguardar conclusão
+    echo "⏳ Aguardando inicialização do banco de dados..."
+    docker logs -f "$init_container_id"
 
-        # Verificar exit code real via docker wait no container capturado
-        exit_code=$(docker wait "$init_container_id" || true)
-        if [ "$exit_code" = "0" ]; then
-            echo "✅ Superset inicializado com sucesso!"
+    # Verificar exit code real via docker wait no container capturado
+    exit_code=$(docker wait "$init_container_id" || true)
+    if [ "$exit_code" = "0" ]; then
+        echo "✅ Superset inicializado com sucesso!"
 
-            # Remover container de inicialização
-            echo "🧹 Removendo container superset_init..."
-            docker compose "${COMPOSE_ARGS[@]}" rm -f superset_init
+        # Remover container de inicialização
+        echo "🧹 Removendo container superset_init..."
+        docker compose "${COMPOSE_ARGS[@]}" rm -f superset_init
 
-            # Marcar como inicializado
-            touch "$init_marker"
-        else
-            echo "❌ Erro na inicialização do Superset (exit code $exit_code)"
-            exit 1
-        fi
+        # Marcar como inicializado
+        touch "$init_marker"
     else
-        echo "ℹ️  Superset já foi inicializado anteriormente"
+        echo "❌ Erro na inicialização do Superset (exit code $exit_code)"
+        exit 1
     fi
 }
 
@@ -303,6 +353,7 @@ echo "🚀 Implantando Superset Loonar"
 select_context
 select_build_mode
 select_ldap_mode
+select_init_mode
 
 COMPOSE_ARGS=(--env-file "$ENV_FILE" -f "$COMPOSE_FILE" --profile init)
 TEMP_FILE=""
