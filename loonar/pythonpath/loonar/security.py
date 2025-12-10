@@ -138,15 +138,14 @@ class LoonarSecurityManager(SupersetSecurityManager):
     def register_views(self) -> None:
         """Register security views while keeping Superset's menu customizations.
 
-        This implementation registers our custom auth view first, then calls
-        the Flask-AppBuilder SecurityManager base class to register all other
-        views and APIs, skipping SupersetSecurityManager to avoid conflicts.
+        This implementation follows SupersetSecurityManager pattern:
+        register SupersetAuthView first via super(), then replace it with ours.
         """
         if not current_app.config.get("FAB_ADD_SECURITY_VIEWS", True):
             return
 
-        # Register our custom auth and register views BEFORE calling base class
-        # This ensures our views take precedence over SupersetAuthView
+        # Register our custom auth view FIRST (before super)
+        # so Flask-AppBuilder can configure it properly
         self.auth_view = self.authdbview()
         self.appbuilder.add_view_no_menu(self.auth_view)
 
@@ -157,15 +156,24 @@ class LoonarSecurityManager(SupersetSecurityManager):
                 SupersetRegisterUserView
             )
 
-        # Call Flask-AppBuilder SecurityManager.register_views() directly
-        # This skips SupersetSecurityManager.register_views() to avoid
-        # registering SupersetAuthView which would conflict with ours
+        # Now call parent SecurityManager to register all other views and APIs
+        # but skip the auth_view since we already registered ours
+        # We need to temporarily store our auth_view and restore it after
+        our_auth_view = self.auth_view
         from flask_appbuilder.security.sqla.manager import SecurityManager
 
+        # Let SecurityManager register everything except auth_view
         SecurityManager.register_views(self)
 
+        # Restore our auth_view (SecurityManager.register_views may have changed it)
+        self.auth_view = our_auth_view
+
+        # Remove SupersetAuthView if it was added by parent class
+        for view in list(self.appbuilder.baseviews):
+            if view.__class__.__name__ == "SupersetAuthView" and view != our_auth_view:
+                self.appbuilder.baseviews.remove(view)
+
         # Remove the duplicate MENU views (not APIs) that we don't want
-        # This follows the same pattern as SupersetSecurityManager
         for view in list(self.appbuilder.baseviews):
             if (
                 isinstance(view, self.rolemodelview.__class__)
