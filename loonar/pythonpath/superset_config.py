@@ -23,7 +23,8 @@ from urllib.parse import urlparse
 
 from cachelib.redis import RedisCache
 from celery.schedules import crontab
-from flask_appbuilder.security.manager import AUTH_DB, SecurityManager
+from flask_appbuilder.security.manager import AUTH_DB
+from flask_appbuilder.security.sqla.manager import SecurityManager
 
 from loonar import LoonarAppInitializer
 from loonar.ldap_config import get_ldap_setting
