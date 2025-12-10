@@ -15,18 +15,50 @@
 # specific language governing permissions and limitations
 # under the License.
 
+import logging
 import os
 from datetime import timedelta
-from typing import Any, Optional
+from typing import Any, Optional, Type
 from urllib.parse import urlparse
 
 from cachelib.redis import RedisCache
 from celery.schedules import crontab
-from flask_appbuilder.security.manager import AUTH_DB
+from flask_appbuilder.security.manager import AUTH_DB, SecurityManager
 
 from loonar import LoonarAppInitializer
 from loonar.ldap_config import get_ldap_setting
 from loonar.security import LoonarSecurityManager
+from superset.security import SupersetSecurityManager
+
+# =============================
+# BLOCO: CONFIGURAÇÃO DE AUTENTICAÇÃO - SELEÇÃO DO FORMULÁRIO DE LOGIN
+# =============================
+# Determinar qual SecurityManager usar baseado na variável de ambiente
+_LOGIN_FORM_TYPE: str = os.getenv("SUPERSET_LOGIN_FORM_TYPE", "ldap").lower()
+
+# Escolher SecurityManager e template baseado na configuração
+# Usando ternário para evitar redefinição de variáveis (problema do mypy)
+_security_manager: Type[SecurityManager] = (
+    SupersetSecurityManager if _LOGIN_FORM_TYPE == "superset" else LoonarSecurityManager
+)
+_login_template: Optional[str] = (
+    None if _LOGIN_FORM_TYPE == "superset" else "loonar/security/login.html"
+)
+
+# Atribuições finais
+CUSTOM_SECURITY_MANAGER: Type[SecurityManager] = _security_manager
+SECURITY_LOGIN_TEMPLATE: Optional[str] = _login_template
+APP_INITIALIZER = LoonarAppInitializer
+
+# Logging para ajudar no debug
+_logger: logging.Logger = logging.getLogger(__name__)
+_logger.info(
+    f"Login form type: {_LOGIN_FORM_TYPE} | Using: {CUSTOM_SECURITY_MANAGER.__name__}"
+)
+
+# =============================
+# BLOCO: SEGURANÇA ORIGINAL
+# =============================
 
 # Security
 SECRET_KEY = os.environ.get("SUPERSET_SECRET_KEY") or os.environ.get("SECRET_KEY")
@@ -60,9 +92,10 @@ AUTH_LDAP_USERNAME_FORMAT: str | None = None
 AUTH_LDAP_SEARCH_FILTER: str | None = None
 AUTH_LDAP_GROUP_FIELD = "memberOf"
 
-CUSTOM_SECURITY_MANAGER = LoonarSecurityManager
-SECURITY_LOGIN_TEMPLATE = "loonar/security/login.html"
-APP_INITIALIZER = LoonarAppInitializer
+# Nota: CUSTOM_SECURITY_MANAGER e SECURITY_LOGIN_TEMPLATE foram movidos
+# para a seção de "CONFIGURAÇÃO DE AUTENTICAÇÃO - SELEÇÃO DO FORMULÁRIO DE LOGIN"
+# acima, pois precisam ser condicionados pela variável SUPERSET_LOGIN_FORM_TYPE
+
 
 # Ensure reCAPTCHA keys are always present in the config to avoid KeyError
 RECAPTCHA_PUBLIC_KEY = os.environ.get("RECAPTCHA_PUBLIC_KEY", "")
