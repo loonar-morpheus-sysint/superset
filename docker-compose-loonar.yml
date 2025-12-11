@@ -121,9 +121,7 @@ services:
     container_name: superset_app
     command: ["/app/docker/docker-bootstrap.sh", "app-gunicorn"]
     user: "root"
-    depends_on:
-      superset_init:
-        condition: service_completed_successfully
+    # Removido depends_on superset_init para evitar erro de dependência
     volumes: *superset-volumes
     extra_hosts: *superset-extra-hosts
     healthcheck:
@@ -148,9 +146,7 @@ services:
     command: ["/app/docker/docker-bootstrap.sh", "worker"]
     user: "root"
     restart: unless-stopped
-    depends_on:
-      superset_init:
-        condition: service_completed_successfully
+    # Removido depends_on superset_init para evitar erro de dependência
     environment:
       CELERYD_CONCURRENCY: 2
     volumes: *superset-volumes
@@ -180,6 +176,7 @@ services:
     restart: unless-stopped
     depends_on:
       - superset_worker
+    # Removido depends_on superset_init para evitar erro de dependência
     volumes: *superset-volumes
     extra_hosts: *superset-extra-hosts
     networks:
