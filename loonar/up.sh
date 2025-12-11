@@ -355,13 +355,16 @@ select_build_mode
 select_ldap_mode
 select_init_mode
 
-COMPOSE_ARGS=(--env-file "$ENV_FILE" -f "$COMPOSE_FILE" --profile init)
+
+# Argumentos para compose init e principal
+COMPOSE_ARGS_INIT=(--env-file "$ENV_FILE" -f "$COMPOSE_FILE" --profile init)
+COMPOSE_ARGS_MAIN=(--env-file "$ENV_FILE" -f "$COMPOSE_FILE")
 TEMP_FILE=""
 
-# Rebuild images upfront when requested to ensure init uses fresh code
+# Rebuild images upfront when solicitado
 if [ "$BUILD_MODE" = "rebuild" ]; then
     echo "🔨 Rebuilding Docker images..."
-    docker compose "${COMPOSE_ARGS[@]}" --profile init build
+    docker compose "${COMPOSE_ARGS_INIT[@]}" build
 fi
 
 # Inicializar estrutura do banco de dados se necessário (apenas na primeira vez)
@@ -369,7 +372,8 @@ check_superset_initialization
 
 if ! compose_has_networks; then
     TEMP_FILE=$(choose_network_override)
-    COMPOSE_ARGS+=(-f "$TEMP_FILE")
+    COMPOSE_ARGS_INIT+=(-f "$TEMP_FILE")
+    COMPOSE_ARGS_MAIN+=(-f "$TEMP_FILE")
 fi
 
 cleanup() {
@@ -380,19 +384,19 @@ cleanup() {
 trap cleanup EXIT
 
 echo "🧪 Validando configuração..."
-docker compose "${COMPOSE_ARGS[@]}" config >/dev/null
+docker compose "${COMPOSE_ARGS_MAIN[@]}" config >/dev/null
 
-echo "📦 Construindo e iniciando serviços..."
+echo "📦 Construindo e iniciando serviços principais..."
 BUILD_FLAG=""
 if [ "$BUILD_MODE" = "rebuild" ]; then
     BUILD_FLAG="--build"
     echo "🔨 Rebuilding Dockerfile-loonar..."
 fi
-docker compose "${COMPOSE_ARGS[@]}" up -d $BUILD_FLAG --remove-orphans
+docker compose "${COMPOSE_ARGS_MAIN[@]}" up -d $BUILD_FLAG --remove-orphans
 
 echo ""
 echo "📊 Status dos containers:"
-docker compose "${COMPOSE_ARGS[@]}" ps
+docker compose "${COMPOSE_ARGS_MAIN[@]}" ps
 
 HOST_URL=$(grep "^SUPERSET_HOST=" "$ENV_FILE" | cut -d '=' -f2)
 [ -z "$HOST_URL" ] && HOST_URL="localhost"
@@ -402,6 +406,6 @@ cat <<EOF
 ✅ Deploy concluído!
    - Contexto ativo: $(docker context show)
    - Acesse: http://$HOST_URL
-   - Logs: docker compose ${COMPOSE_ARGS[*]} logs -f
+   - Logs: docker compose ${COMPOSE_ARGS_MAIN[*]} logs -f
 
 EOF
