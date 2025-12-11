@@ -136,53 +136,42 @@ class LoonarSecurityManager(SupersetSecurityManager):
             connection.unbind()
 
     def register_views(self) -> None:
-        """Register security views while keeping Superset's menu customizations.
-
-        This implementation follows SupersetSecurityManager pattern:
-        register SupersetAuthView first via super(), then replace it with ours.
+        """
+        Corrige o registro das views para garantir que self.auth_view nunca seja None.
+        Registra as views padrão primeiro.
+        Depois substitui a view de autenticação se necessário.
         """
         if not current_app.config.get("FAB_ADD_SECURITY_VIEWS", True):
             return
 
-        # Register our custom auth view FIRST (before super)
-        # so Flask-AppBuilder can configure it properly
-        self.auth_view = self.authdbview()
-        self.appbuilder.add_view_no_menu(self.auth_view)
+        # Chama o registro padrão primeiro (garante que self.auth_view seja válido)
+        super().register_views()
 
-        if self.auth_user_registration:
-            from superset.views.auth import SupersetRegisterUserView
+        # Substitui a view de autenticação pelo customizado, se necessário
+        if self.authdbview is not None:
+            custom_auth_view = self.authdbview()
+            self.auth_view = custom_auth_view
+            self.appbuilder.add_view_no_menu(custom_auth_view)
 
-            self.registeruser_view = self.appbuilder.add_view_no_menu(
-                SupersetRegisterUserView
-            )
+            # Remove SupersetAuthView se existir
+            for view in list(self.appbuilder.baseviews):
+                if (
+                    view.__class__.__name__ == "SupersetAuthView"
+                    and view != custom_auth_view
+                ):
+                    self.appbuilder.baseviews.remove(view)
 
-        # Now call parent SecurityManager to register all other views and APIs
-        # but skip the auth_view since we already registered ours
-        # We need to temporarily store our auth_view and restore it after
-        our_auth_view = self.auth_view
-        from flask_appbuilder.security.sqla.manager import SecurityManager
-
-        # Let SecurityManager register everything except auth_view
-        SecurityManager.register_views(self)
-
-        # Restore our auth_view (SecurityManager.register_views may have changed it)
-        self.auth_view = our_auth_view
-
-        # Remove SupersetAuthView if it was added by parent class
+        # Remove duplicatas de MENU (não APIs)
         for view in list(self.appbuilder.baseviews):
-            if view.__class__.__name__ == "SupersetAuthView" and view != our_auth_view:
+            if hasattr(view, "route_base") and view.route_base in [
+                "/roles",
+                "/users",
+                "/groups",
+                "/registrations",
+            ]:
                 self.appbuilder.baseviews.remove(view)
 
-        # Remove the duplicate MENU views (not APIs) that we don't want
-        for view in list(self.appbuilder.baseviews):
-            if (
-                isinstance(view, self.rolemodelview.__class__)
-                and hasattr(view, "route_base")
-                and view.route_base in ["/roles", "/users", "/groups", "/registrations"]
-            ):
-                self.appbuilder.baseviews.remove(view)
-
-        # Clean up security menu items
+        # Limpa itens do menu de segurança
         security_menu = next(
             (m for m in self.appbuilder.menu.get_list() if m.name == "Security"), None
         )
