@@ -151,6 +151,8 @@ class LoonarSecurityManager(SupersetSecurityManager):
         if self.authdbview is not None:
             custom_auth_view = self.authdbview()
             self.auth_view = custom_auth_view
+            # Registra o endpoint explicitamente
+            custom_auth_view.endpoint = "LoonarAuthDBView"
             self.appbuilder.add_view_no_menu(custom_auth_view)
 
             # Remove SupersetAuthView se existir
