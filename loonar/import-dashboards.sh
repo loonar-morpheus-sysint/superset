@@ -5,10 +5,13 @@ clear
 
 # Configurações padrão
 ORIG_SSH_USER="devopsvanilla"
-ORIG_SSH_HOST="192.168.0.222"
+ORIG_SSH_HOST="finops.sondahybrid.com"
 IMPORTS_DIR="./imports"
 EXPORTS_TMP_DIR="/tmp/superset_exports"
 CONTAINER_NAME="superset_app"
+SUPERSET_URL="https://finops-hom.sondahybrid.com"
+SUPERSET_USERNAME="admin"
+SUPERSET_PASSWORD="admin"
 
 # Parse CLI flags
 show_help() {
@@ -19,6 +22,9 @@ Uso: $0 [opções]
   --imports-dir DIR        Diretório local para salvar imports
   --exports-tmp-dir DIR    Diretório temporário remoto para exports
   --container NOME         Nome do container (local e remoto)
+  --superset-url URL       URL do Superset local (padrão: https://localhost)
+  --superset-user USER     Usuário admin do Superset (padrão: admin)
+  --superset-pass PASS     Senha do usuário admin
   --no-prompt              Não perguntar nada (modo não-interativo)
   -h, --help               Exibe esta ajuda
 EOF
@@ -36,6 +42,12 @@ while [ $# -gt 0 ]; do
       EXPORTS_TMP_DIR="$2"; shift 2;;
     --container)
       CONTAINER_NAME="$2"; shift 2;;
+    --superset-url)
+      SUPERSET_URL="$2"; shift 2;;
+    --superset-user)
+      SUPERSET_USERNAME="$2"; shift 2;;
+    --superset-pass)
+      SUPERSET_PASSWORD="$2"; shift 2;;
     --no-prompt)
       NO_PROMPT=1; shift;;
     -h|--help)
@@ -45,8 +57,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-# Interface interativa: cores, emojis e prompts para confirmar/editar valores
-# Definições de cor
+# Interface interativa: cores, emojis e prompts
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
@@ -54,7 +65,6 @@ BLUE='\033[0;34m'
 BOLD='\033[1m'
 RESET='\033[0m'
 
-# Se NO_PROMPT=1 for set, pula todas as interações (útil para CI)
 NO_PROMPT=${NO_PROMPT:-0}
 
 prompt_edit() {
@@ -75,7 +85,6 @@ prompt_edit() {
   fi
 }
 
-# Confirmação simples sim/não (default sim)
 confirm() {
   local msg=$1
   if [ "${NO_PROMPT}" = "1" ]; then
@@ -91,7 +100,6 @@ confirm() {
   esac
 }
 
-# Permite ao usuário revisar/editar valores iniciais
 echo -e "${BOLD}🔧 Revisar configurações (pressione Enter para manter o valor atual)${RESET}"
 prompt_edit ORIG_SSH_USER "${ORIG_SSH_USER}" "Usuário SSH do servidor de origem"
 prompt_edit ORIG_SSH_HOST "${ORIG_SSH_HOST}" "Host/IP do servidor de origem"
@@ -105,20 +113,7 @@ echo -e "  • Diretório imports local: ${BOLD}${IMPORTS_DIR}${RESET}"
 echo -e "  • Diretório temporário remoto: ${BOLD}${EXPORTS_TMP_DIR}${RESET}"
 echo -e "  • Nome do container: ${BOLD}${CONTAINER_NAME}${RESET}"
 
-# -----------------------------
-# Checagens prévias (pre-flight)
-# -----------------------------
-print_usage() {
-  cat <<-USAGE
-Usage: ORIG_SSH_USER=usuario ORIG_SSH_HOST=host ./import-dashboards.sh
-
-Variáveis de ambiente opcionais:
-  ORIG_SSH_USER - usuário SSH do servidor de origem (padrão: ${ORIG_SSH_USER})
-  ORIG_SSH_HOST - FQDN/IP do servidor de origem (padrão: ${ORIG_SSH_HOST})
-  IMPORTS_DIR   - diretório local para salvar importações (padrão: ${IMPORTS_DIR})
-USAGE
-}
-
+# Checagens prévias
 check_command() {
   command -v "$1" >/dev/null 2>&1 || { echo "ERRO: comando '$1' não encontrado. Instale-o e tente novamente."; exit 1; }
 }
@@ -139,79 +134,95 @@ check_local_container() {
 }
 
 check_remote_container() {
-  # tenta inspecionar o container no host remoto; não falha necessariamente, só avisa
   if ! ssh "${ORIG_SSH_USER}@${ORIG_SSH_HOST}" docker inspect --format='{{.State.Running}}' "${CONTAINER_NAME}" >/dev/null 2>&1; then
     echo "AVISO: não foi possível confirmar que o container '${CONTAINER_NAME}' está rodando no host remoto ${ORIG_SSH_HOST}.";
-    echo "Continuando porque export pode ainda funcionar via comando 'superset' no container remoto.";
   fi
 }
 
-# Executa checagens básicas
 check_command ssh
 check_command scp
 check_command docker
+check_command curl
 echo "==> Executando checagens prévias (pre-flight)..."
 check_ssh
 check_remote_container
 check_local_container
 echo "==> Checagens prévias OK."
 
-# Função para executar comandos no container do servidor de origem via SSH
+# Funções auxiliares
 ssh_container() {
-  # Passa os argumentos corretamente para o ssh (evita problemas com quoting)
   ssh "${ORIG_SSH_USER}@${ORIG_SSH_HOST}" -- docker exec "${CONTAINER_NAME}" "$@"
 }
 
-# Função para executar comandos no container local
 local_container() {
-  # Passa os argumentos corretamente ao docker exec
   docker exec "${CONTAINER_NAME}" "$@"
 }
 
+get_access_token() {
+  echo -e "${BLUE}⤷ Tentando autenticar no Superset (${SUPERSET_URL})...${RESET}"
 
-echo -e "${BOLD}🚀 Iniciando exportação de dashboards, charts e datasets do servidor de origem...${RESET}"
+  local response
+  response=$(curl -k -s -w "\nHTTP_CODE:%{http_code}" -X POST "${SUPERSET_URL}/api/v1/security/login" \
+    -H "Content-Type: application/json" \
+    -d "{\"username\":\"${SUPERSET_USERNAME}\",\"password\":\"${SUPERSET_PASSWORD}\"}" 2>&1)
 
-# Cria diretório temporário no servidor de origem
-echo -e "${BLUE}⤷ Criando diretório temporário remoto: ${EXPORTS_TMP_DIR}${RESET}"
-ssh "${ORIG_SSH_USER}@${ORIG_SSH_HOST}" -- mkdir -p -- "${EXPORTS_TMP_DIR}"
+  local http_code=$(echo "$response" | grep "HTTP_CODE:" | cut -d':' -f2)
+  local body=$(echo "$response" | sed '/HTTP_CODE:/d')
 
+  if [ "$http_code" != "200" ]; then
+    echo -e "${RED}❌ Erro na autenticação. HTTP Code: ${http_code}${RESET}"
+    echo -e "${YELLOW}Response: ${body}${RESET}"
+    return 1
+  fi
 
-# Pergunta antes de exportar
-if confirm "Executar export no servidor remoto?"; then
-  echo -e "${YELLOW}📦 Exportando dashboards...${RESET}"
-  ssh_container superset export-dashboards "${EXPORTS_TMP_DIR}/dashboards.zip" && echo -e "${GREEN}✅ Dashboards exportados: ${EXPORTS_TMP_DIR}/dashboards.zip${RESET}"
+  local token=$(echo "$body" | grep -o '"access_token":"[^"]*' | cut -d'"' -f4)
 
-  echo -e "${YELLOW}📊 Exportando charts...${RESET}"
-  ssh_container superset export-charts "${EXPORTS_TMP_DIR}/charts.zip" && echo -e "${GREEN}✅ Charts exportados: ${EXPORTS_TMP_DIR}/charts.zip${RESET}"
+  if [ -z "$token" ]; then
+    echo -e "${RED}❌ Token não encontrado na resposta${RESET}"
+    echo -e "${YELLOW}Response: ${body}${RESET}"
+    return 1
+  fi
 
-  echo -e "${YELLOW}🗂️  Exportando datasets...${RESET}"
-  ssh_container superset export-datasets "${EXPORTS_TMP_DIR}/datasets.zip" && echo -e "${GREEN}✅ Datasets exportados: ${EXPORTS_TMP_DIR}/datasets.zip${RESET}"
-else
-  echo -e "${RED}Abortando export conforme escolha do usuário.${RESET}"
-  exit 1
-fi
+  echo "$token"
+}
 
-echo -e "${BLUE}📁 Copiando arquivos exportados para o servidor local (${IMPORTS_DIR})...${RESET}"
-mkdir -p "${IMPORTS_DIR}"
-scp "${ORIG_SSH_USER}@${ORIG_SSH_HOST}:${EXPORTS_TMP_DIR}/dashboards.zip" "${IMPORTS_DIR}/" && echo -e "${GREEN}✅ Copiado: dashboards.zip${RESET}"
-scp "${ORIG_SSH_USER}@${ORIG_SSH_HOST}:${EXPORTS_TMP_DIR}/charts.zip" "${IMPORTS_DIR}/" && echo -e "${GREEN}✅ Copiado: charts.zip${RESET}"
-scp "${ORIG_SSH_USER}@${ORIG_SSH_HOST}:${EXPORTS_TMP_DIR}/datasets.zip" "${IMPORTS_DIR}/" && echo -e "${GREEN}✅ Copiado: datasets.zip${RESET}"
+delete_existing_dashboards() {
+  local token=$1
 
-echo -e "${BOLD}🔁 Importando datasets, charts e dashboards no servidor local...${RESET}"
-if confirm "Prosseguir com import no container local '${CONTAINER_NAME}'?"; then
-  local_container superset import-datasets "${IMPORTS_DIR}/datasets.zip" && echo -e "${GREEN}✅ Datasets importados.${RESET}"
-  local_container superset import-charts "${IMPORTS_DIR}/charts.zip" && echo -e "${GREEN}✅ Charts importados.${RESET}"
-  local_container superset import-dashboards "${IMPORTS_DIR}/dashboards.zip" && echo -e "${GREEN}✅ Dashboards importados.${RESET}"
-else
-  echo -e "${RED}Import abortado pelo usuário.${RESET}"
-  exit 1
-fi
+  echo -e "${YELLOW}🔍 Buscando dashboards existentes...${RESET}"
 
-echo -e "${YELLOW}🧹 Limpeza dos arquivos temporários no servidor de origem...${RESET}"
-if confirm "Remover '${EXPORTS_TMP_DIR}' no servidor remoto?"; then
-  ssh "${ORIG_SSH_USER}@${ORIG_SSH_HOST}" -- rm -rf -- "${EXPORTS_TMP_DIR}" && echo -e "${GREEN}✅ Limpeza remota concluída.${RESET}"
-else
-  echo -e "${YELLOW}⚠️  Arquivos temporários mantidos em ${ORIG_SSH_HOST}:${EXPORTS_TMP_DIR}${RESET}"
-fi
+  local response
+  response=$(curl -k -s -w "\nHTTP_CODE:%{http_code}" -X GET "${SUPERSET_URL}/api/v1/dashboard/?q=(page_size:1000)" \
+    -H "Authorization: Bearer ${token}" \
+    -H "Content-Type: application/json" 2>&1)
 
-echo -e "${BOLD}${GREEN}🎉 Processo concluído com sucesso!${RESET}"
+  local http_code=$(echo "$response" | grep "HTTP_CODE:" | cut -d':' -f2)
+  local body=$(echo "$response" | sed '/HTTP_CODE:/d')
+
+  if [ "$http_code" != "200" ]; then
+    echo -e "${RED}❌ Erro ao buscar dashboards. HTTP Code: ${http_code}${RESET}"
+    return 1
+  fi
+
+  local dashboard_ids
+  dashboard_ids=$(echo "$body" | grep -o '"id":[0-9]*' | cut -d':' -f2 | sort -u)
+
+  if [ -z "$dashboard_ids" ]; then
+    echo -e "${GREEN}✅ Nenhum dashboard existente encontrado.${RESET}"
+    return 0
+  fi
+
+  local count=$(echo "$dashboard_ids" | wc -l)
+  echo -e "${YELLOW}📋 Dashboards encontrados: ${count}${RESET}"
+
+  if confirm "Deseja deletar os ${count} dashboards existentes antes de importar?"; then
+    for id in $dashboard_ids; do
+      echo -e "${BLUE}⤷ Deletando dashboard ID: ${id}${RESET}"
+      local del_response
+      del_response=$(curl -k -s -w "\nHTTP_CODE:%{http_code}" -X DELETE "${SUPERSET_URL}/api/v1/dashboard/${id}" \
+        -H "Authorization: Bearer ${token}" \
+        -H "Content-Type: application/json" 2>&1)
+
+      local del_code=$(echo "$del_response" | grep "HTTP_CODE:" | cut -d':' -f2)
+      if [ "$del_code" != "200" ]; then
+        echo -e "${RED}  ⚠️  Erro ao deletar dashboard ${id} (HTTP ${
