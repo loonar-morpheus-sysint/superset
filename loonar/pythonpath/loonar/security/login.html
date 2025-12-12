@@ -1,0 +1,60 @@
+{# Licensed to the Apache Software Foundation (ASF) under one or more
+   contributor license agreements.  See the NOTICE file distributed with
+   this work for additional information regarding copyright ownership.
+   The ASF licenses this file to You under the Apache License, Version 2.0
+   (the "License"); you may not use this file except in compliance with
+   the License.  You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License. #}
+{% extends "appbuilder/general/security/base.html" %}
+{% import "appbuilder/general/lib.html" as lib %}
+
+{% block body %}
+<div class="container">
+  <div class="row justify-content-center">
+    <div class="col-lg-4 col-md-6">
+      {{ lib.render_flashed_messages() }}
+      <div class="card mt-5">
+        <div class="card-body">
+          <h4 class="card-title text-center mb-4">{{ _("Entrar no Superset") }}</h4>
+          <form id="loonar-login-form" method="post">
+            {{ form.hidden_tag() }}
+            <div class="form-group mb-3">
+              {{ form.username.label(class="form-label") }}
+              {{ form.username(class="form-control", autofocus=True) }}
+            </div>
+            <div class="form-group mb-3">
+              {{ form.password.label(class="form-label") }}
+              {{ form.password(class="form-control", type="password") }}
+            </div>
+            {% if form.remember_me %}
+            <div class="form-check mb-3">
+              {{ form.remember_me(class="form-check-input", id="remember_me") }}
+              <label class="form-check-label" for="remember_me">
+                {{ _("Manter sessão (apenas para login do banco)") }}
+              </label>
+            </div>
+            {% endif %}
+            <p class="form-text mb-3">
+              {{ _("Escolha o provedor no botão correspondente abaixo.") }}
+            </p>
+            <div class="d-flex flex-column gap-2">
+              <button type="submit" class="btn btn-primary" data-auth-provider="database">
+                {{ _("Entrar com Banco de Dados do Superset") }}
+              </button>
+              <button type="submit" class="btn btn-secondary" data-auth-provider="ldap">
+                {{ _("Entrar com Active Directory") }}
+              </button>
+            </div>
+            <div class="d-none">
+              {{ form.auth_provider(id="auth_provider") }}
+            </div>
+          </form>
+        </div>
+      </div>

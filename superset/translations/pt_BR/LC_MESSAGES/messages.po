@@ -22,11 +22,11 @@ msgstr ""
 "Last-Translator: \n"
 "Language: pt_BR\n"
 "Language-Team: \n"
-"Plural-Forms: nplurals=2; plural=(n > 1)\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=utf-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"Generated-By: Babel 2.9.1\n"
+"Generated-By: Babel 2.10.3\n"
 
 msgid ""
 "\n"
@@ -938,9 +938,6 @@ msgstr "Escreva uma descrição para sua consulta"
 msgid "Add extra connection information."
 msgstr "Adicione informações adicionais sobre a conexão."
 
-msgid "Add filter"
-msgstr "Adicionar filtro"
-
 msgid ""
 "Add filter clauses to control the filter's source query,\n"
 "                    though only in the context of the autocomplete i.e., "
@@ -1365,7 +1362,7 @@ msgstr ""
 msgid "An error has occurred"
 msgstr "Ocorreu um erro"
 
-#, fuzzy, python-format
+#, fuzzy
 msgid "An error has occurred while syncing virtual dataset columns"
 msgstr "Ocorreu um erro durante a pesquisa de conjuntos de dados: %s"
 
@@ -3386,9 +3383,6 @@ msgstr ""
 msgid "Create a new chart"
 msgstr "Criar um novo gráfico"
 
-msgid "Create chart"
-msgstr "Criar gráfico"
-
 msgid "Create chart with dataset"
 msgstr "Criar gráfico com conjunto de dados"
 
@@ -5406,7 +5400,7 @@ msgstr "Habilitar filtragem cruzada"
 msgid "Failed to start remote query on a worker."
 msgstr "Falha ao iniciar a consulta remota em um worker."
 
-#, fuzzy, python-format
+#, fuzzy
 msgid "Failed to stop query."
 msgstr "Falha ao parar a consulta. %s"
 
@@ -10166,9 +10160,6 @@ msgstr "Mostrar todas as colunas"
 msgid "Show axis line ticks"
 msgstr "Mostrar os tiques das linhas de eixo"
 
-msgid "Show cell bars"
-msgstr "Mostrar barras de células"
-
 msgid "Show chart description"
 msgstr "Mostrar descrição do gráfico"
 
@@ -10185,7 +10176,7 @@ msgstr "Mostrar pontos de dados como marcadores de círculos nas linhas"
 msgid "Show empty columns"
 msgstr "Mostrar colunas vazias"
 
-#, fuzzy, python-format
+#, fuzzy
 msgid "Show entries per page"
 msgstr "Mostrar %s entradas"
 
@@ -11957,7 +11948,7 @@ msgstr "Ocorreu um erro ao carregar os esquemas"
 msgid "There was an error loading the tables"
 msgstr "Ocorreu um erro ao carregar as tabelas"
 
-#, fuzzy, python-format
+#, fuzzy
 msgid "There was an error retrieving dashboard tabs."
 msgstr "Desculpe, houve um erro ao salvar este painel: %s"
 
@@ -12614,7 +12605,7 @@ msgstr "Total (%(aggfunc)s)"
 msgid "Total (%(aggregatorName)s)"
 msgstr "Total (%(aggregatorName)s)"
 
-#, fuzzy, python-format
+#, fuzzy
 msgid "Total (Sum)"
 msgstr "Total: %s"
 
@@ -15040,7 +15031,7 @@ msgstr "ícone de tipo desconhecido"
 msgid "unset"
 msgstr "Junho"
 
-#, fuzzy, python-format
+#, fuzzy
 msgid "updated"
 msgstr "%s atualizado"
 

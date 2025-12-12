@@ -197,8 +197,6 @@ services:
     command: ["/app/docker/docker-init.sh"]
     user: "root"
     restart: "no"
-    profiles:
-      - init
     depends_on:
       db:
         condition: service_healthy
@@ -216,6 +214,10 @@ services:
       context: .
       dockerfile: docker/nginx/Dockerfile
     container_name: superset_nginx
+    ulimits:
+      nofile:
+        soft: 4096
+        hard: 8192
     restart: unless-stopped
     depends_on:
       superset_app:

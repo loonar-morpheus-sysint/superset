@@ -33,6 +33,7 @@ from superset.security import SupersetSecurityManager
 
 # =============================
 # BLOCO: CONFIGURAÇÃO DE AUTENTICAÇÃO - SELEÇÃO DO FORMULÁRIO DE LOGIN
+ENABLE_FLASK_LOGIN = True
 # =============================
 # Determinar qual SecurityManager usar baseado na variável de ambiente
 _LOGIN_FORM_TYPE: str = os.getenv("SUPERSET_LOGIN_FORM_TYPE", "ldap").lower()
@@ -47,8 +48,8 @@ _login_template: Optional[str] = (
 )
 
 # Atribuições finais
-CUSTOM_SECURITY_MANAGER: Type[SecurityManager] = _security_manager
-SECURITY_LOGIN_TEMPLATE: Optional[str] = _login_template
+CUSTOM_SECURITY_MANAGER = _security_manager
+SECURITY_LOGIN_TEMPLATE = _login_template
 APP_INITIALIZER = LoonarAppInitializer
 
 # Logging para ajudar no debug
@@ -94,7 +95,8 @@ AUTH_LDAP_SEARCH_FILTER: str | None = None
 AUTH_LDAP_GROUP_FIELD = "memberOf"
 
 # Nota: CUSTOM_SECURITY_MANAGER e SECURITY_LOGIN_TEMPLATE foram movidos
-# para a seção de "CONFIGURAÇÃO DE AUTENTICAÇÃO - SELEÇÃO DO FORMULÁRIO DE LOGIN"
+# para a seção de
+# "CONFIGURAÇÃO DE AUTENTICAÇÃO - SELEÇÃO DO FORMULÁRIO DE LOGIN"
 # acima, pois precisam ser condicionados pela variável SUPERSET_LOGIN_FORM_TYPE
 
 
@@ -114,9 +116,9 @@ DATABASE_PASSWORD = os.environ.get("DATABASE_PASSWORD", "")
 DATABASE_HOST = os.environ.get("DATABASE_HOST", "db")
 DATABASE_PORT = os.environ.get("DATABASE_PORT", "5432")
 DATABASE_DB = os.environ.get("DATABASE_DB", "superset")
-SQLALCHEMY_DATABASE_URI = (
-    os.environ.get("DATABASE_URL")
-    or f"{DATABASE_DIALECT}://{DATABASE_USER}:{DATABASE_PASSWORD}@{DATABASE_HOST}:{DATABASE_PORT}/{DATABASE_DB}"
+SQLALCHEMY_DATABASE_URI = os.environ.get("DATABASE_URL") or (
+    f"{DATABASE_DIALECT}://{DATABASE_USER}:{DATABASE_PASSWORD}"
+    f"@{DATABASE_HOST}:{DATABASE_PORT}/{DATABASE_DB}"
 )
 SQLALCHEMY_TRACK_MODIFICATIONS = False
 SQLALCHEMY_ENGINE_OPTIONS = {
@@ -151,7 +153,7 @@ CACHE_CONFIG = {
     "CACHE_TYPE": "RedisCache",
     "CACHE_DEFAULT_TIMEOUT": 300,
     "CACHE_KEY_PREFIX": "superset_",
-    "CACHE_REDIS_URL": f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/2",
+    "CACHE_REDIS_URL": (f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/2"),
 }
 
 DATA_CACHE_CONFIG = {
@@ -253,6 +255,8 @@ FEATURE_FLAGS = {
     "SQL_VALIDATORS_BY_ENGINE": True,
     "THUMBNAILS": True,
     "THUMBNAILS_SQLA_LISTENERS": True,
+    "ENABLE_FLASK_LOGIN": True,
+    "DISABLE_REACT_LOGIN": True,
 }
 
 # WebDriver for thumbnails/alerts
