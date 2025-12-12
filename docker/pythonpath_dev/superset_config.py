@@ -1,31 +1,42 @@
-# Licensed to the Apache Software Foundation (ASF) under one
-# or more contributor license agreements.  See the NOTICE file
-# distributed with this work for additional information
-# regarding copyright ownership.  The ASF licenses this file
-# to you under the Apache License, Version 2.0 (the
-# "License"); you may not use this file except in compliance
-# with the License.  You may obtain a copy of the License at
-#
-#   http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing,
-# software distributed under the License is distributed on an
-# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-# KIND, either express or implied.  See the License for the
-# specific language governing permissions and limitations
-# under the License.
-#
-# This file is included in the final Docker image and SHOULD be overridden when
-# deploying the image to prod. Settings configured here are intended for use in local
-# development environments. Also note that superset_config_docker.py is imported
-# as a final step as a means to override "defaults" configured here
-#
+"""
+Licensed to the Apache Software Foundation (ASF) under one
+or more contributor license agreements.  See the NOTICE file
+distributed with this work for additional information
+regarding copyright ownership.  The ASF licenses this file
+to you under the Apache License, Version 2.0 (the
+"License"); you may not use this file except in compliance
+with the License.  You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing,
+software distributed under the License is distributed on an
+"AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+KIND, either express or implied.  See the License for the
+specific language governing permissions and limitations
+under the License.
+
+This file is included in the final Docker image and SHOULD be overridden when
+deploying the image to prod. Settings configured here are intended for use in
+local development environments. Also note that
+superset_config_docker.py is imported
+as a final step as a means to override "defaults" configured here
+"""
+
 import logging
 import os
 import sys
 
 from celery.schedules import crontab
 from flask_caching.backends.filesystemcache import FileSystemCache
+
+# =============================
+# SUPORTE A IDIOMA PT-BR
+LANGUAGES = {
+    "en": {"flag": "us", "name": "English"},
+    "pt_BR": {"flag": "br", "name": "Português (Brasil)"},
+}
+BABEL_DEFAULT_LOCALE = "pt_BR"
 
 logger = logging.getLogger()
 
@@ -61,7 +72,7 @@ REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", "")
 REDIS_CELERY_DB = os.getenv("REDIS_CELERY_DB", "0")
 REDIS_RESULTS_DB = os.getenv("REDIS_RESULTS_DB", "1")
 
-RESULTS_BACKEND = FileSystemCache("/app/superset_home/sqllab")
+RESULTS_BACKEND: FileSystemCache = FileSystemCache("/app/superset_home/sqllab")
 
 CACHE_CONFIG = {
     "CACHE_TYPE": "RedisCache",
@@ -111,7 +122,10 @@ CELERY_CONFIG = CeleryConfig
 
 FEATURE_FLAGS = {"ALERT_REPORTS": True}
 ALERT_REPORTS_NOTIFICATION_DRY_RUN = True
-WEBDRIVER_BASEURL = f"http://superset_app{os.environ.get('SUPERSET_APP_ROOT', '/')}/"  # When using docker compose baseurl should be http://superset_nginx{ENV{BASEPATH}}/  # noqa: E501
+# The base URL for the webdriver (used for screenshots, etc.)
+WEBDRIVER_BASEURL = f"http://superset_app{os.environ.get('SUPERSET_APP_ROOT', '/')}/"
+# When using docker compose baseurl should be
+# http://superset_nginx{ENV{BASEPATH}}/
 # The base URL for the email report hyperlinks.
 WEBDRIVER_BASEURL_USER_FRIENDLY = (
     f"http://localhost:8888/{os.environ.get('SUPERSET_APP_ROOT', '/')}/"
@@ -122,8 +136,8 @@ log_level_text = os.getenv("SUPERSET_LOG_LEVEL", "INFO")
 LOG_LEVEL = getattr(logging, log_level_text.upper(), logging.INFO)
 
 if os.getenv("CYPRESS_CONFIG") == "true":
-    # When running the service as a cypress backend, we need to import the config
-    # located @ tests/integration_tests/superset_test_config.py
+    # When running the service as a cypress backend, we need to import the
+    # config located at tests/integration_tests/superset_test_config.py
     base_dir = os.path.dirname(__file__)
     module_folder = os.path.abspath(
         os.path.join(base_dir, "../../tests/integration_tests/")
@@ -139,16 +153,15 @@ if os.getenv("CYPRESS_CONFIG") == "true":
 #
 try:
     import superset_config_docker
-    from superset_config_docker import *  # noqa: F403
 
     logger.info(
-        f"Loaded your Docker configuration at [{superset_config_docker.__file__}]"
+        "Loaded your Docker configuration at [%s]",
+        superset_config_docker.__file__,
     )
 except ImportError:
     logger.info("Using default Docker config...")
 
 # Reverse proxy / HTTPS settings
-# Ensure Superset correctly recognizes headers set by Nginx and treats requests as HTTPS
 ENABLE_PROXY_FIX = True
 SESSION_COOKIE_SECURE = True
 SESSION_COOKIE_SAMESITE = None
