@@ -254,10 +254,8 @@ sync_mock_server_uri() {
 }
 
 check_superset_initialization() {
-    # Marcar arquivo de inicialização
     local init_marker="$PROJECT_ROOT/.superset_initialized"
 
-    # Verificar se deve executar inicialização baseado na escolha do usuário
     if [ "$INIT_MODE" = "skip" ]; then
         echo "⏭️  Pulando inicialização do banco de dados"
         return 0
@@ -270,31 +268,21 @@ check_superset_initialization() {
         echo "🔧 Primeira execução detectada - inicializando Superset..."
     fi
 
-    # Inicializar com profile 'init'
+    # Executa superset_init explicitamente e aguarda finalização
     echo "🔄 Executando superset_init com profile init..."
-    docker compose "${COMPOSE_ARGS[@]}" --profile init up -d superset_init
+    docker compose "${COMPOSE_ARGS_INIT[@]}" up superset_init
 
-    # Capturar o container criado para conseguir ler o exit code depois
-    init_container_id=$(docker compose "${COMPOSE_ARGS[@]}" ps -q superset_init | head -n1)
+    # Verifica se o container foi criado e finalizado com sucesso
+    init_container_id=$(docker compose "${COMPOSE_ARGS_INIT[@]}" ps -a -q superset_init | head -n1)
     if [ -z "$init_container_id" ]; then
         echo "❌ Não foi possível identificar o container superset_init"
         exit 1
     fi
 
-    # Aguardar conclusão
-    echo "⏳ Aguardando inicialização do banco de dados..."
-    docker logs -f "$init_container_id"
-
-    # Verificar exit code real via docker wait no container capturado
-    exit_code=$(docker wait "$init_container_id" || true)
+    exit_code=$(docker inspect "$init_container_id" --format='{{.State.ExitCode}}')
     if [ "$exit_code" = "0" ]; then
         echo "✅ Superset inicializado com sucesso!"
-
-        # Remover container de inicialização
-        echo "🧹 Removendo container superset_init..."
-        docker compose "${COMPOSE_ARGS[@]}" rm -f superset_init
-
-        # Marcar como inicializado
+        docker compose "${COMPOSE_ARGS_INIT[@]}" rm -f superset_init
         touch "$init_marker"
     else
         echo "❌ Erro na inicialização do Superset (exit code $exit_code)"
