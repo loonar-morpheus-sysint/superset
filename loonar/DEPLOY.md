@@ -261,6 +261,29 @@ Esse sintoma ocorre quando o Nginx ainda não foi recarregado com o template que
 
 ---
 
+## 🎯 Exemplo de Conexão MSSQL (SQL Server) no Superset
+
+Para conectar o Superset a um banco de dados Microsoft SQL Server usando o driver ODBC 18, utilize a seguinte string de conexão no campo "SQLAlchemy URI":
+
+```text
+mssql+pyodbc://usuario:senha@host:1433/nome_do_banco?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes
+```
+
+**Exemplo com dados fictícios:**
+
+```text
+mssql+pyodbc://superset_user:Sup3rs3tPwd!@192.168.1.100:1433/MeuBanco?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes
+```
+
+**Atenção:**
+- O parâmetro `TrustServerCertificate=yes` é necessário para aceitar certificados autoassinados.
+- O separador entre parâmetros extras é `&` (e comercial).
+- O nome do driver deve ser exatamente igual ao instalado no sistema (verifique com `odbcinst -q -d`).
+
+Se ocorrer erro de SSL/certificado, revise o parâmetro acima. Se aparecer erro de driver, valide a instalação do ODBC Driver 18.
+
+---
+
 ## ⚠️ Avisos de Segurança
 
 1. **NUNCA** versione o arquivo `.env` com segredos reais
