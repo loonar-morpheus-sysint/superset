@@ -32,6 +32,14 @@ from loonar.security import LoonarSecurityManager
 from superset.security import SupersetSecurityManager
 
 # =============================
+# SUPORTE A IDIOMA PT-BR
+LANGUAGES = {
+    "en": {"flag": "us", "name": "English"},
+    "pt_BR": {"flag": "br", "name": "Português (Brasil)"},
+}
+BABEL_DEFAULT_LOCALE = "pt_BR"
+
+# =============================
 # BLOCO: CONFIGURAÇÃO DE AUTENTICAÇÃO - SELEÇÃO DO FORMULÁRIO DE LOGIN
 ENABLE_FLASK_LOGIN = True
 # =============================
