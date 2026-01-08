@@ -195,6 +195,11 @@ const mockedProps = {
           name: 'Italian',
           url: '/lang/it',
         },
+        pt_BR: {
+          flag: 'br',
+          name: 'Português (Brasil)',
+          url: '/lang/pt_BR',
+        },
       },
       show_language_picker: true,
       user_is_anonymous: true,

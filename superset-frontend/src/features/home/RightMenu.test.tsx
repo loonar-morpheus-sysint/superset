@@ -108,6 +108,11 @@ const createProps = (): RightMenuProps => ({
         name: 'Italian',
         url: '/lang/it',
       },
+      pt_BR: {
+        flag: 'br',
+        name: 'Português (Brasil)',
+        url: '/lang/pt_BR',
+      },
     },
     show_language_picker: false,
     user_is_anonymous: false,

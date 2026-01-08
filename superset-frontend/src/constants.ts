@@ -160,7 +160,23 @@ export const DEFAULT_COMMON_BOOTSTRAP_DATA: CommonBootstrapData = {
     },
     navbar_right: {
       show_watermark: true,
-      languages: {},
+      languages: {
+        en: {
+          flag: 'us',
+          name: 'English',
+          url: '/lang/en',
+        },
+        it: {
+          flag: 'it',
+          name: 'Italian',
+          url: '/lang/it',
+        },
+        pt_BR: {
+          flag: 'br',
+          name: 'Português (Brasil)',
+          url: '/lang/pt_BR',
+        },
+      },
       show_language_picker: true,
       user_is_anonymous: false,
       user_info_url: '',
