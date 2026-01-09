@@ -229,6 +229,7 @@ services:
     command: ["/bin/sh", "-c", "envsubst '$$SUPERSET_HOST $$SSL_CERT $$SSL_KEY $$SSL_TRUSTED' < /etc/nginx/templates/superset.conf.template > /etc/nginx/conf.d/superset.conf && nginx -g 'daemon off;'" ]
     volumes:
       - nginx_logs_data:/var/log/nginx
+      - ./loonar/ssl-certs:/etc/nginx/certs:ro
     # Para produção, configure regras de firewall para expor apenas as portas necessárias
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1/health || exit 1"]
