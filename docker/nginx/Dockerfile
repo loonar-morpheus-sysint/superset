@@ -24,3 +24,11 @@ COPY docker/nginx/templates /etc/nginx/templates
 
 # Copia certificados Loonar (podem ser substituídos antes do build)
 COPY loonar/ssl-certs /etc/nginx/certs
+
+# Ajustar permissões dos certificados SSL
+# A chave privada (privkey.pem) deve ter permissão 600 (leitura/escrita apenas para root)
+# Os certificados podem ter permissão 644 (leitura para todos)
+RUN chmod 600 /etc/nginx/certs/privkey.pem && \
+    chmod 644 /etc/nginx/certs/cert.pem /etc/nginx/certs/chain.pem /etc/nginx/certs/fullchain.pem 2>/dev/null || true && \
+    chown root:root /etc/nginx/certs/* && \
+    ls -la /etc/nginx/certs/
