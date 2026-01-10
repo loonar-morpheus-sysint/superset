@@ -219,9 +219,6 @@ services:
         soft: 4096
         hard: 8192
     restart: unless-stopped
-    depends_on:
-      superset_app:
-        condition: service_healthy
     env_file: *superset-env
     ports:
       - 80:80
