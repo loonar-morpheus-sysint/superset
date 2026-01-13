@@ -171,7 +171,7 @@ class AbstractEventLogger(ABC):
     ) -> None:
         pass
 
-    def log_with_context(  # pylint: disable=too-many-locals,too-many-arguments
+    def log_with_context(  # pylint: disable=too-many-locals,too-many-arguments  # noqa: C901
         self,
         action: str,
         duration: timedelta | None = None,
@@ -197,6 +197,9 @@ class AbstractEventLogger(ABC):
             try:
                 actual_user = g.get("user", None)
                 if actual_user is not None:
+                    # If actual_user is a LocalProxy, extract the real object
+                    if hasattr(actual_user, "_get_current_object"):
+                        actual_user = actual_user._get_current_object()
                     db.session.add(actual_user)
                     user_id = get_user_id()
             except Exception as ex:
