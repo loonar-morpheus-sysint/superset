@@ -14,6 +14,7 @@
 # limitations under the License.
 from __future__ import annotations
 
+import logging
 from typing import List, Optional
 
 from flask import current_app, flash, redirect, request, Response
@@ -32,6 +33,8 @@ from wtforms import HiddenField
 from superset.security import SupersetSecurityManager
 
 from .ldap_config import get_ldap_setting
+
+logger = logging.getLogger(__name__)
 
 
 class LoonarLoginForm(LoginForm_db):
@@ -61,21 +64,50 @@ class LoonarAuthDBView(AuthDBView):
         )
 
     def _login_with_database(self, form: LoonarLoginForm) -> Optional[Response]:
-        user = self.appbuilder.sm.auth_user_db(form.username.data, form.password.data)
-        if not user:
-            flash(_("Usuário ou senha inválidos."), "danger")
+        try:
+            user = self.appbuilder.sm.auth_user_db(
+                form.username.data, form.password.data
+            )
+            if not user:
+                flash(_("Usuário ou senha inválidos."), "danger")
+                return None
+            remember = getattr(form, "remember_me", None)
+            login_user(user, remember=bool(remember.data) if remember else False)
+            return redirect(self.get_redirect())
+        except Exception as e:
+            logger.error(
+                "Erro durante autenticação do banco de dados para "
+                f"usuário {form.username.data}: {str(e)}",
+                exc_info=True,
+            )
+            flash(_("Erro ao processar login. Tente novamente."), "danger")
             return None
-        remember = getattr(form, "remember_me", None)
-        login_user(user, remember=bool(remember.data) if remember else False)
-        return redirect(self.get_redirect())
 
     def _login_with_ldap(self, form: LoonarLoginForm) -> Optional[Response]:
-        user = self.appbuilder.sm.auth_user_ldap(form.username.data, form.password.data)
-        if not user:
-            flash(_("Credenciais inválidas no Active Directory."), "danger")
+        try:
+            user = self.appbuilder.sm.auth_user_ldap(
+                form.username.data, form.password.data
+            )
+            if not user:
+                flash(_("Credenciais inválidas no Active Directory."), "danger")
+                return None
+            login_user(user, remember=False)
+            return redirect(self.get_redirect())
+        except LDAPException as e:
+            logger.error(
+                f"Erro de conexão LDAP para usuário {form.username.data}: {str(e)}",
+                exc_info=True,
+            )
+            flash(_("Erro ao conectar ao Active Directory. Tente novamente."), "danger")
             return None
-        login_user(user, remember=False)
-        return redirect(self.get_redirect())
+        except Exception as e:
+            logger.error(
+                "Erro durante autenticação LDAP para "
+                f"usuário {form.username.data}: {str(e)}",
+                exc_info=True,
+            )
+            flash(_("Erro ao processar login. Tente novamente."), "danger")
+            return None
 
 
 class LoonarSecurityManager(SupersetSecurityManager):
@@ -94,10 +126,18 @@ class LoonarSecurityManager(SupersetSecurityManager):
         )
 
     def auth_user_ldap(self, username: str, password: str) -> Optional[User]:
-        user = super().auth_user_ldap(username, password)
-        if user:
-            self._sync_roles_from_ldap_groups(user, username)
-        return user
+        try:
+            user = super().auth_user_ldap(username, password)
+            if user:
+                self._sync_roles_from_ldap_groups(user, username)
+            return user
+        except Exception as e:
+            logger.error(
+                f"Erro ao sincronizar roles LDAP para usuário {username}: {str(e)}",
+                exc_info=True,
+            )
+            # Retorna o usuário mesmo que a sincronização de roles falhe
+            return super().auth_user_ldap(username, password)
 
     def _sync_roles_from_ldap_groups(self, user: User, username: str) -> None:
         if not self.ldap_group_base:
@@ -105,15 +145,21 @@ class LoonarSecurityManager(SupersetSecurityManager):
 
         connection = self._get_bound_connection()
         if connection is None:
+            logger.warning(
+                "Não foi possível obter conexão LDAP para sincronizar "
+                f"roles do usuário {username}"
+            )
             return
 
         try:
             user_dn = self._lookup_user_dn(connection, username)
             if not user_dn:
+                logger.debug(f"DN do usuário {username} não encontrado no LDAP")
                 return
 
             group_names = self._fetch_group_names(connection, user_dn)
             if not group_names:
+                logger.debug(f"Nenhum grupo LDAP encontrado para o usuário {username}")
                 return
 
             session: Session = self.session
@@ -123,17 +169,32 @@ class LoonarSecurityManager(SupersetSecurityManager):
                 .all()
             )
             if not matching_roles:
+                logger.debug(
+                    "Nenhuma role correspondente encontrada para "
+                    f"grupos LDAP do usuário {username}"
+                )
                 return
 
             current_names = {role.name for role in user.roles}
             new_names = {role.name for role in matching_roles}
             if new_names == current_names:
+                logger.debug(f"Roles do usuário {username} já estão sincronizadas")
                 return
 
             user.roles = matching_roles
             session.commit()
+            logger.info(f"Roles do usuário {username} sincronizadas: {new_names}")
+        except Exception as e:
+            logger.error(
+                f"Erro ao sincronizar roles LDAP para usuário {username}: {str(e)}",
+                exc_info=True,
+            )
+            # Não lança exceção, apenas loga o erro
         finally:
-            connection.unbind()
+            try:
+                connection.unbind()
+            except Exception as e:
+                logger.warning(f"Erro ao desconectar do LDAP: {str(e)}")
 
     def register_views(self) -> None:
         """
@@ -195,10 +256,15 @@ class LoonarSecurityManager(SupersetSecurityManager):
             get_ldap_setting("LOONAR_LDAP_USE_SSL", "false") or "false"
         ).lower() == "true"
         if not server_uri or not bind_dn or not bind_password:
+            logger.warning(
+                "Configurações LDAP incompletas: server_uri=%s, bind_dn=%s",
+                bool(server_uri),
+                bool(bind_dn),
+            )
             return None
 
-        server = Server(server_uri, use_ssl=use_ssl, get_info=ALL)
         try:
+            server = Server(server_uri, use_ssl=use_ssl, get_info=ALL)
             return Connection(
                 server,
                 user=bind_dn,
@@ -206,9 +272,20 @@ class LoonarSecurityManager(SupersetSecurityManager):
                 auto_bind=True,
                 check_names=False,
             )
-        except LDAPException:
-            self.logger.exception(
-                "Não foi possível conectar ao servidor LDAP %s", server_uri
+        except LDAPException as e:
+            logger.error(
+                "Não foi possível conectar ao servidor LDAP %s: %s",
+                server_uri,
+                str(e),
+                exc_info=True,
+            )
+            return None
+        except Exception as e:
+            logger.error(
+                "Erro inesperado ao conectar ao servidor LDAP %s: %s",
+                server_uri,
+                str(e),
+                exc_info=True,
             )
             return None
 
