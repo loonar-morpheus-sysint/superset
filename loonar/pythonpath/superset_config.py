@@ -23,7 +23,7 @@ from urllib.parse import urlparse
 
 from cachelib.redis import RedisCache
 from celery.schedules import crontab
-from flask_appbuilder.security.manager import AUTH_DB
+from flask_appbuilder.security.manager import AUTH_DB, AUTH_LDAP
 from flask_appbuilder.security.sqla.manager import SecurityManager
 
 from loonar import LoonarAppInitializer
@@ -75,7 +75,8 @@ SECRET_KEY = os.environ.get("SUPERSET_SECRET_KEY") or os.environ.get("SECRET_KEY
 if not SECRET_KEY:
     raise ValueError("SECRET_KEY must be set in production")
 
-AUTH_TYPE = AUTH_DB
+# Usar LDAP quando LoonarSecurityManager estiver ativo, caso contrário DB
+AUTH_TYPE = AUTH_LDAP if _LOGIN_FORM_TYPE == "ldap" else AUTH_DB
 AUTH_USER_REGISTRATION = True
 AUTH_USER_REGISTRATION_ROLE = "Gamma"
 

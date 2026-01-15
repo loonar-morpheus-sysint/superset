@@ -143,3 +143,5 @@ volumes/
 /loonar/ad-user.txt
 
 *.log
+
+loonar/.env-prod
