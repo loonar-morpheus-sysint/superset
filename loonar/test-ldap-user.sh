@@ -24,8 +24,6 @@
 # 1. Via ldapsearch (testa conectividade e busca de usuários/grupos)
 # 2. Via API REST do Superset (testa autenticação real)
 
-set -e
-
 # =============================
 # CORES PARA OUTPUT
 # =============================
@@ -65,16 +63,23 @@ separator() {
 
 load_env() {
     # Procurar .env-prod primeiro, depois .env
+    local env_file=""
+
     if [ -f "loonar/.env-prod" ]; then
-        source loonar/.env-prod
-        log_success "Variáveis carregadas de loonar/.env-prod"
+        env_file="loonar/.env-prod"
     elif [ -f "loonar/.env" ]; then
-        source loonar/.env
-        log_success "Variáveis carregadas de loonar/.env"
+        env_file="loonar/.env"
     else
         log_error "Arquivo de configuração não encontrado (.env ou .env-prod)"
         exit 1
     fi
+
+    # Carregar variáveis do arquivo .env com proteção contra caracteres especiais
+    set -a
+    source "$env_file" 2>/dev/null || true
+    set +a
+
+    log_success "Variáveis carregadas de $env_file"
 
     # Validar variáveis obrigatórias
     if [ -z "$LOONAR_LDAP_MODE" ]; then
