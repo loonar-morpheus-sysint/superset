@@ -145,3 +145,6 @@ volumes/
 *.log
 
 loonar/.env-prod
+loonar/test-ldap2.sh
+loonar/test-remote-1.txt
+loonar/test-remote-2.txt

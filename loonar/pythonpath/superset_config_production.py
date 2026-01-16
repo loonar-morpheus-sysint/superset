@@ -211,7 +211,12 @@ LOG_LEVEL = _log_level.upper() if isinstance(_log_level, str) else _log_level
 LOG_FORMAT = "%(asctime)s:%(levelname)s:%(name)s:%(message)s"
 
 # Session
-PERMANENT_SESSION_LIFETIME = timedelta(days=1)
+# Tempo máximo de inatividade antes de expirar a sessão (em minutos)
+# Configura via variável de ambiente AUTH_SESSION_TIMEOUT (padrão: 20 minutos)
+_session_timeout_minutes = int(os.environ.get("AUTH_SESSION_TIMEOUT", "20"))
+PERMANENT_SESSION_LIFETIME = timedelta(minutes=_session_timeout_minutes)
+# Revalida o timeout a cada request para manter expiração por inatividade
+SESSION_REFRESH_EACH_REQUEST = True
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SECURE = True
 SESSION_COOKIE_SAMESITE = "Lax"
