@@ -934,40 +934,58 @@ class Superset(BaseSupersetView):
         # If so, redirect automatically to that dashboard
         try:
             from sqlalchemy import and_, or_
-            from superset.connectors.sqla.models import SqlaTable
-            from superset.models.slice import Slice
-            from superset.models.core import Database
             
-            # Build query for dashboards with datasource access (same logic as DashboardAccessFilter)
             if security_manager.is_admin():
                 # Admins see all published dashboards
                 query = db.session.query(Dashboard).filter(
                     Dashboard.published.is_(True)
                 )
             else:
-                # Non-admin users: see dashboards they own OR have datasource access to
+                user_id = get_user_id()
+                
+                # Non-admin users: see dashboards they own OR via role-based access
+                # This replicates DashboardAccessFilter logic
+                
+                # 1. Dashboards where user is an owner
                 owner_ids_query = (
                     db.session.query(Dashboard.id)
                     .join(Dashboard.owners)
-                    .filter(security_manager.user_model.id == get_user_id())
+                    .filter(security_manager.user_model.id == user_id)
                 )
-
-                datasource_perm_query = (
+                
+                # 2. Dashboards accessible via role-based access (dashboard_roles)
+                from superset.models.ab import Role
+                role_ids_subquery = (
+                    db.session.query(Role.id)
+                    .join(security_manager.user_model.roles)
+                    .filter(security_manager.user_model.id == user_id)
+                )
+                
+                role_dashboard_ids_query = (
                     db.session.query(Dashboard.id)
-                    .join(Dashboard.slices, isouter=True)
-                    .join(SqlaTable, Slice.datasource_id == SqlaTable.id)
-                    .join(Database, SqlaTable.database_id == Database.id)
-                    .filter(
-                        and_(
-                            Dashboard.published.is_(True),
+                    .join(
+                        db.Table(
+                            "dashboard_roles",
+                            db.Column("dashboard_id", db.Integer),
+                            db.Column("role_id", db.Integer),
                         )
                     )
+                    .filter(
+                        db.Table(
+                            "dashboard_roles",
+                            db.Column("dashboard_id", db.Integer),
+                            db.Column("role_id", db.Integer),
+                        ).c.role_id.in_(role_ids_subquery)
+                    )
                 )
-
+                
                 query = db.session.query(Dashboard).filter(
-                    or_(
-                        Dashboard.id.in_(owner_ids_query),
-                        Dashboard.id.in_(datasource_perm_query),
+                    and_(
+                        Dashboard.published.is_(True),
+                        or_(
+                            Dashboard.id.in_(owner_ids_query),
+                            Dashboard.id.in_(role_dashboard_ids_query),
+                        ),
                     )
                 )
 
