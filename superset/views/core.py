@@ -78,7 +78,6 @@ from superset.models.core import Database
 from superset.models.dashboard import Dashboard
 from superset.models.slice import Slice
 from superset.models.sql_lab import Query
-from superset.dashboards.filters import DashboardAccessFilter
 from superset.models.user_attributes import UserAttribute
 from superset.superset_typing import FlaskResponse
 from superset.tasks.utils import get_current_user
@@ -934,14 +933,43 @@ class Superset(BaseSupersetView):
         # Check if user has access to exactly one dashboard
         # If so, redirect automatically to that dashboard
         try:
-            # Start from published dashboards only
-            query = (
-                db.session.query(Dashboard)
-                .filter(Dashboard.published.is_(True))
-            )
+            from sqlalchemy import and_, or_
+            from superset.connectors.sqla.models import SqlaTable
+            from superset.models.slice import Slice
+            from superset.models.core import Database
+            
+            # Build query for dashboards with datasource access (same logic as DashboardAccessFilter)
+            if security_manager.is_admin():
+                # Admins see all published dashboards
+                query = db.session.query(Dashboard).filter(
+                    Dashboard.published.is_(True)
+                )
+            else:
+                # Non-admin users: see dashboards they own OR have datasource access to
+                owner_ids_query = (
+                    db.session.query(Dashboard.id)
+                    .join(Dashboard.owners)
+                    .filter(security_manager.user_model.id == get_user_id())
+                )
 
-            # Apply RBAC access filter (same logic used by API list)
-            query = DashboardAccessFilter().apply(query, None)
+                datasource_perm_query = (
+                    db.session.query(Dashboard.id)
+                    .join(Dashboard.slices, isouter=True)
+                    .join(SqlaTable, Slice.datasource_id == SqlaTable.id)
+                    .join(Database, SqlaTable.database_id == Database.id)
+                    .filter(
+                        and_(
+                            Dashboard.published.is_(True),
+                        )
+                    )
+                )
+
+                query = db.session.query(Dashboard).filter(
+                    or_(
+                        Dashboard.id.in_(owner_ids_query),
+                        Dashboard.id.in_(datasource_perm_query),
+                    )
+                )
 
             # We only need to know if there is exactly one
             accessible_dashboards = query.limit(2).all()
