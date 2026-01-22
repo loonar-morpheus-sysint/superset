@@ -933,7 +933,7 @@ class Superset(BaseSupersetView):
         # Check if user has access to exactly one dashboard
         # If so, redirect automatically to that dashboard
         try:
-            from sqlalchemy import and_, or_
+            from sqlalchemy import text
             
             if security_manager.is_admin():
                 # Admins see all published dashboards
@@ -944,49 +944,34 @@ class Superset(BaseSupersetView):
                 user_id = get_user_id()
                 
                 # Non-admin users: see dashboards they own OR via role-based access
-                # This replicates DashboardAccessFilter logic
+                # Using SQL directly to get dashboard IDs accessible to the user
                 
-                # 1. Dashboards where user is an owner
-                owner_ids_query = (
-                    db.session.query(Dashboard.id)
-                    .join(Dashboard.owners)
-                    .filter(security_manager.user_model.id == user_id)
-                )
-                
-                # 2. Dashboards accessible via role-based access (dashboard_roles)
-                from superset.models.ab import Role
-                role_ids_subquery = (
-                    db.session.query(Role.id)
-                    .join(security_manager.user_model.roles)
-                    .filter(security_manager.user_model.id == user_id)
-                )
-                
-                role_dashboard_ids_query = (
-                    db.session.query(Dashboard.id)
-                    .join(
-                        db.Table(
-                            "dashboard_roles",
-                            db.Column("dashboard_id", db.Integer),
-                            db.Column("role_id", db.Integer),
+                sql = text("""
+                    SELECT DISTINCT d.id
+                    FROM dashboards d
+                    WHERE d.published = true
+                    AND (
+                        -- Via ownership
+                        d.id IN (SELECT dashboard_id FROM dashboard_user WHERE user_id = :user_id)
+                        OR
+                        -- Via role-based access
+                        d.id IN (
+                            SELECT dr.dashboard_id FROM dashboard_roles dr
+                            JOIN ab_user_role ur ON dr.role_id = ur.role_id
+                            WHERE ur.user_id = :user_id
                         )
                     )
-                    .filter(
-                        db.Table(
-                            "dashboard_roles",
-                            db.Column("dashboard_id", db.Integer),
-                            db.Column("role_id", db.Integer),
-                        ).c.role_id.in_(role_ids_subquery)
-                    )
-                )
+                """)
+                
+                result = db.session.execute(sql, {"user_id": user_id}).fetchall()
+                dashboard_ids = [row[0] for row in result]
+                
+                if not dashboard_ids:
+                    # User has no accessible dashboards, show welcome page
+                    dashboard_ids = [-1]  # Dummy value to avoid empty IN clause
                 
                 query = db.session.query(Dashboard).filter(
-                    and_(
-                        Dashboard.published.is_(True),
-                        or_(
-                            Dashboard.id.in_(owner_ids_query),
-                            Dashboard.id.in_(role_dashboard_ids_query),
-                        ),
-                    )
+                    Dashboard.id.in_(dashboard_ids)
                 )
 
             # We only need to know if there is exactly one
