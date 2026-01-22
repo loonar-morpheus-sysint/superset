@@ -934,10 +934,9 @@ class Superset(BaseSupersetView):
         # Check if user has access to exactly one dashboard
         # If so, redirect automatically to that dashboard
         try:
-            # Start from published and not hidden dashboards
+            # Start from published dashboards only
             query = (
                 db.session.query(Dashboard)
-                .filter(~Dashboard.is_hidden)
                 .filter(Dashboard.published.is_(True))
             )
 
