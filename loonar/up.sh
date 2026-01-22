@@ -352,7 +352,7 @@ TEMP_FILE=""
 # Rebuild images upfront when solicitado
 if [ "$BUILD_MODE" = "rebuild" ]; then
     echo "🔨 Rebuilding Docker images..."
-    docker compose "${COMPOSE_ARGS_INIT[@]}" build
+    docker compose "${COMPOSE_ARGS_INIT[@]}" build --no-cache
 fi
 
 # Inicializar estrutura do banco de dados se necessário (apenas na primeira vez)
