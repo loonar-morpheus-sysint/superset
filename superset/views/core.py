@@ -78,6 +78,7 @@ from superset.models.core import Database
 from superset.models.dashboard import Dashboard
 from superset.models.slice import Slice
 from superset.models.sql_lab import Query
+from superset.dashboards.filters import DashboardAccessFilter
 from superset.models.user_attributes import UserAttribute
 from superset.superset_typing import FlaskResponse
 from superset.tasks.utils import get_current_user
@@ -933,27 +934,26 @@ class Superset(BaseSupersetView):
         # Check if user has access to exactly one dashboard
         # If so, redirect automatically to that dashboard
         try:
-            dashboards = (
+            # Start from published and not hidden dashboards
+            query = (
                 db.session.query(Dashboard)
                 .filter(~Dashboard.is_hidden)
-                .filter(Dashboard.published == True)  # noqa: E712
-                .all()
+                .filter(Dashboard.published.is_(True))
             )
-            
-            # Filter dashboards by checking access for each one
-            accessible_dashboards = [
-                dashboard
-                for dashboard in dashboards
-                if security_manager.can_access_dashboard(dashboard)
-            ]
-            
+
+            # Apply RBAC access filter (same logic used by API list)
+            query = DashboardAccessFilter().apply(query, None)
+
+            # We only need to know if there is exactly one
+            accessible_dashboards = query.limit(2).all()
+
             # If user has access to exactly one dashboard, redirect to it
             if len(accessible_dashboards) == 1:
                 dashboard_id = accessible_dashboards[0].id
                 return redirect(f"/superset/dashboard/{dashboard_id}/")
         except Exception:
-            # If there's any error checking dashboards, just continue to normal welcome page
-            logger.warning("Error checking accessible dashboards for auto-redirect")
+            # Log full stack for troubleshooting and fall back to normal welcome page
+            logger.exception("Error checking accessible dashboards for auto-redirect")
 
         payload = {
             "user": bootstrap_user_data(g.user, include_perms=True),
