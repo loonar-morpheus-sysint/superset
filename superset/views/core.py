@@ -930,6 +930,31 @@ class Superset(BaseSupersetView):
         ):
             return self.dashboard(dashboard_id_or_slug=str(welcome_dashboard_id))
 
+        # Check if user has access to exactly one dashboard
+        # If so, redirect automatically to that dashboard
+        try:
+            dashboards = (
+                db.session.query(Dashboard)
+                .filter(~Dashboard.is_hidden)
+                .filter(Dashboard.published == True)  # noqa: E712
+                .all()
+            )
+            
+            # Filter dashboards by checking access for each one
+            accessible_dashboards = [
+                dashboard
+                for dashboard in dashboards
+                if security_manager.can_access_dashboard(dashboard)
+            ]
+            
+            # If user has access to exactly one dashboard, redirect to it
+            if len(accessible_dashboards) == 1:
+                dashboard_id = accessible_dashboards[0].id
+                return redirect(f"/superset/dashboard/{dashboard_id}/")
+        except Exception:
+            # If there's any error checking dashboards, just continue to normal welcome page
+            logger.warning("Error checking accessible dashboards for auto-redirect")
+
         payload = {
             "user": bootstrap_user_data(g.user, include_perms=True),
             "common": common_bootstrap_payload(),
