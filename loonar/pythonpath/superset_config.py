@@ -371,3 +371,33 @@ THEME_DARK: dict[str, Any] = {
         "brandLogoHeight": "40px",
     }
 }
+
+# ------------------------------------------------------------------
+# Configuração de moedas disponíveis no dropdown do frontend
+# ------------------------------------------------------------------
+CURRENCIES = [
+    "USD",
+    "GBP",
+    "JPY",
+    "EUR",
+    "INR",
+    "CNY",
+    "MXN",
+    "BRL",
+]
+
+# ------------------------------------------------------------------
+# D3 Format - Configuração de formatação de moedas
+# ------------------------------------------------------------------
+D3_FORMAT = {
+    "CURRENCIES": [
+        {"symbol": "$", "name": "USD", "symbolPosition": "prefix"},
+        {"symbol": "£", "name": "GBP", "symbolPosition": "prefix"},
+        {"symbol": "¥", "name": "JPY", "symbolPosition": "prefix"},
+        {"symbol": "€", "name": "EUR", "symbolPosition": "prefix"},
+        {"symbol": "₹", "name": "INR", "symbolPosition": "prefix"},
+        {"symbol": "CN¥", "name": "CNY", "symbolPosition": "prefix"},
+        {"symbol": "MX$", "name": "MXN", "symbolPosition": "prefix"},
+        {"symbol": "R$", "name": "BRL", "symbolPosition": "prefix"},
+    ]
+}
