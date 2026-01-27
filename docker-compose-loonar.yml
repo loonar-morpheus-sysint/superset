@@ -116,6 +116,8 @@ services:
       network: host
       extra_hosts:
         - "host.docker.internal:host-gateway"
+      args:
+        BUILD_TRANSLATIONS: "true"
     # Opção alternativa: Usar imagem oficial (descomente as linhas abaixo e comente o 'build' acima)
     # image: apache/superset:latest
     container_name: superset_app
@@ -142,6 +144,8 @@ services:
       network: host
       extra_hosts:
         - "host.docker.internal:host-gateway"
+      args:
+        BUILD_TRANSLATIONS: "true"
     container_name: superset_worker
     command: ["/app/docker/docker-bootstrap.sh", "worker"]
     user: "root"
@@ -170,6 +174,8 @@ services:
       network: host
       extra_hosts:
         - "host.docker.internal:host-gateway"
+      args:
+        BUILD_TRANSLATIONS: "true"
     container_name: superset_worker_beat
     command: ["/app/docker/docker-bootstrap.sh", "beat"]
     user: "root"
@@ -193,6 +199,8 @@ services:
       network: host
       extra_hosts:
         - "host.docker.internal:host-gateway"
+      args:
+        BUILD_TRANSLATIONS: "true"
     container_name: superset_init
     command: ["/app/docker/docker-init.sh"]
     user: "root"
