@@ -55,10 +55,9 @@
       {% endfor %}
 
       <link
-        rel="preload"
+        rel="stylesheet"
         type="text/css"
         href="{{ assets_prefix }}/static/appbuilder/css/flags/flags16.css"
-        as="style"
       />
 
       {# Load custom fonts from configuration #}
@@ -108,14 +107,5 @@
       {% endif %}
       {% include "tail_js_custom_extra.html" %}
     {% endblock %}
-
-    <script nonce="{{ macros.get_nonce() }}">
-      document.addEventListener('DOMContentLoaded', function () {
-        var preloadLinks = document.querySelectorAll('link[rel="preload"][as="style"]');
-        preloadLinks.forEach(function (link) {
-          link.rel = 'stylesheet';
-        });
-      });
-    </script>
   </body>
 </html>
