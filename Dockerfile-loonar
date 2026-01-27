@@ -88,6 +88,9 @@ COPY superset-frontend /app/superset-frontend
 ######################################################################
 FROM superset-node-ci AS superset-node
 
+# Copy translations from superset-node-ci stage
+COPY --from=superset-node-ci /app/superset/translations /app/superset/translations
+
 # Build the frontend if not in dev mode
 RUN --mount=type=cache,target=/root/.npm \
     if [ "$DEV_MODE" = "false" ]; then \
