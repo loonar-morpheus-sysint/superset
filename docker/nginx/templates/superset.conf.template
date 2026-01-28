@@ -65,9 +65,6 @@ server {
     ssl_stapling_verify on;
     resolver 1.1.1.1 8.8.8.8 valid=300s ipv6=off;
 
-    # Security headers (CSP enforced by Superset/Talisman)
-    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
-
     # Health check endpoint (no auth required)
     location /health {
         access_log off;
