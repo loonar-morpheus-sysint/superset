@@ -245,6 +245,10 @@ TALISMAN_CONFIG = {
     },
     "force_https": True,
     "force_https_permanent": True,
+    "strict_transport_security": True,
+    "strict_transport_security_max_age": 31536000,
+    "strict_transport_security_include_subdomains": True,
+    "strict_transport_security_preload": True,
 }
 
 # CORS
