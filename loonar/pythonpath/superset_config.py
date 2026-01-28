@@ -77,7 +77,7 @@ if not SECRET_KEY:
 
 # Usar LDAP quando LoonarSecurityManager estiver ativo, caso contrário DB
 AUTH_TYPE = AUTH_LDAP if _LOGIN_FORM_TYPE == "ldap" else AUTH_DB
-AUTH_USER_REGISTRATION = True
+AUTH_USER_REGISTRATION = False
 AUTH_USER_REGISTRATION_ROLE = "Gamma"
 
 AUTH_LDAP_SERVER = get_ldap_setting("LOONAR_LDAP_SERVER")
