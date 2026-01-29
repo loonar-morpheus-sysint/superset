@@ -44,10 +44,19 @@ if (process.env.WEBPACK_MODE === 'development') {
 // Grab initial bootstrap data
 const bootstrapData = getBootstrapData();
 
-setupFormatters(
-  bootstrapData.common.d3_format,
-  bootstrapData.common.d3_time_format,
-);
+// Resolve number format: prefer server `d3_format`, otherwise fall back to locale-specific mappings
+const LOCALE_D3_NUMBER_FORMATS: Record<string, Partial<import('d3-format').FormatLocaleDefinition>> = {
+  // Brazilian Portuguese uses comma as decimal and dot as thousands separator
+  pt_BR: { decimal: ',', thousands: '.', grouping: [3], currency: ['R$', ''] },
+  pt: { decimal: ',', thousands: '.', grouping: [3], currency: ['R$', ''] },
+};
+
+const effectiveD3NumberFormat =
+  bootstrapData.common.d3_format && Object.keys(bootstrapData.common.d3_format).length
+    ? bootstrapData.common.d3_format
+    : LOCALE_D3_NUMBER_FORMATS[bootstrapData.common.locale] || {};
+
+setupFormatters(effectiveD3NumberFormat, bootstrapData.common.d3_time_format);
 
 // Setup SupersetClient early so we can fetch language pack
 setupClient({ appRoot: applicationRoot() });

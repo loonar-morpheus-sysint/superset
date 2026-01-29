@@ -39,6 +39,15 @@ LANGUAGES = {
 }
 BABEL_DEFAULT_LOCALE = "pt_BR"
 
+# Formato numérico D3 padrão para pt_BR (ponto como separador de milhar e vírgula decimal)
+# Pode ser sobrescrito por D3_FORMAT no ambiente de produção, se desejado.
+D3_FORMAT = {
+    "decimal": ",",
+    "thousands": ".",
+    "grouping": [3],
+    "currency": ["R$", ""],
+}
+
 # =============================
 # BLOCO: CONFIGURAÇÃO DE AUTENTICAÇÃO - SELEÇÃO DO FORMULÁRIO DE LOGIN
 ENABLE_FLASK_LOGIN = True
