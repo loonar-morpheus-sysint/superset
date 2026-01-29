@@ -402,15 +402,16 @@ CURRENCIES = [
 # ------------------------------------------------------------------
 # D3 Format - Configuração de formatação de moedas
 # ------------------------------------------------------------------
-D3_FORMAT = {
-    "CURRENCIES": [
-        {"symbol": "$", "name": "USD", "symbolPosition": "prefix"},
-        {"symbol": "£", "name": "GBP", "symbolPosition": "prefix"},
-        {"symbol": "¥", "name": "JPY", "symbolPosition": "prefix"},
-        {"symbol": "€", "name": "EUR", "symbolPosition": "prefix"},
-        {"symbol": "₹", "name": "INR", "symbolPosition": "prefix"},
-        {"symbol": "CN¥", "name": "CNY", "symbolPosition": "prefix"},
-        {"symbol": "MX$", "name": "MXN", "symbolPosition": "prefix"},
-        {"symbol": "R$", "name": "BRL", "symbolPosition": "prefix"},
-    ]
-}
+# Garante que a lista de moedas seja adicionada sem sobrescrever as
+# chaves numéricas (por exemplo: decimal, thousands) definidas acima.
+# Utilizamos a lista `CURRENCIES` definida mais acima para evitar duplicação.
+D3_FORMAT.setdefault("CURRENCIES", [
+    {"symbol": "$", "name": "USD", "symbolPosition": "prefix"},
+    {"symbol": "£", "name": "GBP", "symbolPosition": "prefix"},
+    {"symbol": "¥", "name": "JPY", "symbolPosition": "prefix"},
+    {"symbol": "€", "name": "EUR", "symbolPosition": "prefix"},
+    {"symbol": "₹", "name": "INR", "symbolPosition": "prefix"},
+    {"symbol": "CN¥", "name": "CNY", "symbolPosition": "prefix"},
+    {"symbol": "MX$", "name": "MXN", "symbolPosition": "prefix"},
+    {"symbol": "R$", "name": "BRL", "symbolPosition": "prefix"},
+])
