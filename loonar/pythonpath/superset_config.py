@@ -33,11 +33,18 @@ from superset.security import SupersetSecurityManager
 
 # =============================
 # SUPORTE A IDIOMA PT-BR
+# IMPORTANTE: Superset desabilita i18n por padrão (LANGUAGES = {}),
+# então precisamos reabilitar com os idiomas desejados.
+# Isso DEVE estar aqui, ANTES de qualquer outro import que possa 
+# sobrescrever LANGUAGES.
 LANGUAGES = {
     "en": {"flag": "us", "name": "English"},
     "pt_BR": {"flag": "br", "name": "Português (Brasil)"},
 }
 BABEL_DEFAULT_LOCALE = "pt_BR"
+# Garanta que i18n está habilitado
+# (Superset por padrão desabilita com LANGUAGES = {})
+ENABLE_LANGUAGE_PACK = True
 
 # Formato numérico D3 padrão para pt_BR (ponto como separador de milhar e vírgula decimal)
 # Pode ser sobrescrito por D3_FORMAT no ambiente de produção, se desejado.
@@ -46,6 +53,16 @@ D3_FORMAT = {
     "thousands": ".",
     "grouping": [3],
     "currency": ["R$", ""],
+}
+
+# Diretórios onde Babel pode encontrar as traduções compiladas
+BABEL_TRANSLATION_DIRECTORIES = "superset/translations"
+
+# Garanta que o locale padrão é pt_BR (não permite fallback para pt)
+# Se houver requisição para 'pt' sem '_BR', redireciona para 'pt_BR'
+SUPPORTED_LANGUAGES = {
+    "en": "English",
+    "pt_BR": "Português (Brasil)",
 }
 
 # =============================
