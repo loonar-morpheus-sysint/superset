@@ -105,7 +105,14 @@ COPY superset/translations /app/superset/translations
 
 # Build translations if enabled, then cleanup localization files
 RUN if [ "$BUILD_TRANSLATIONS" = "true" ]; then \
+    # Some forks may contain malformed PO lines like `msgstr msgstr ""`.
+    # Sanitize PO files before running the frontend translation build.
+    node -e "const fs=require('fs'); const path=require('path'); const root='/app/superset/translations'; let scanned=0,repl=0;\
+function walk(dir){ for(const ent of fs.readdirSync(dir,{withFileTypes:true})){ const p=path.join(dir,ent.name); if(ent.isDirectory()) walk(p); else if(p.endsWith('.po')){ const txt=fs.readFileSync(p,'utf8'); const m=txt.match(/msgstr msgstr/g); const next=txt.replace(/msgstr msgstr/g,'msgstr'); if(next!==txt){ fs.writeFileSync(p,next,'utf8'); repl += m?m.length:0; } scanned++; } } }\
+walk(root); console.log('PO sanitize:', {scanned, replacements: repl});"; \
         npm run build-translation; \
+    # Ensure the pt_BR language pack exists for the UI locale picker.
+    test -f /app/superset/translations/pt_BR/LC_MESSAGES/messages.json; \
     fi; \
     rm -rf /app/superset/translations/*/*/*.po; \
     rm -rf /app/superset/translations/*/*/*.mo;
@@ -148,7 +155,23 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 COPY superset/translations/ /app/translations_mo/
 RUN if [ "$BUILD_TRANSLATIONS" = "true" ]; then \
-        pybabel compile -d /app/translations_mo | true; \
+        # Some downstream forks occasionally end up with malformed PO files like:
+        #   msgstr msgstr ""
+        # which causes pybabel compile to fail. Sanitize in-place prior to compilation.
+        python -c "import pathlib; root=pathlib.Path('/app/translations_mo'); repl=0; files=0;\
+for po in root.rglob('*.po'): \
+    try: text=po.read_text(encoding='utf-8')\
+    except UnicodeDecodeError: text=po.read_text(encoding='latin-1')\
+    new=text.replace('msgstr msgstr','msgstr');\
+    if new!=text: po.write_text(new, encoding='utf-8'); repl += text.count('msgstr msgstr');\
+    files += 1;\
+print(f'PO sanitize: scanned={files} replacements={repl}')"; \
+    # IMPORTANT: include 'fuzzy' entries.
+    # This repo's pt_BR catalog contains many translated strings still marked as fuzzy.
+    # Without --use-fuzzy, Babel skips them and will often fall back to 'pt' (if present).
+    pybabel compile -f -d /app/translations_mo || true; \
+        # If pt_BR is enabled in config, ensure the compiled catalog exists.
+        test -f /app/translations_mo/pt_BR/LC_MESSAGES/messages.mo; \
     fi; \
     rm -f /app/translations_mo/*/*/*.po;
 
