@@ -81,6 +81,7 @@ from superset.models.sql_lab import Query
 from superset.models.user_attributes import UserAttribute
 from superset.superset_typing import FlaskResponse
 from superset.tasks.utils import get_current_user
+from superset.translations.utils import normalize_locale
 from superset.utils import core as utils, json
 from superset.utils.cache import etag_cache
 from superset.utils.core import (
@@ -902,12 +903,19 @@ class Superset(BaseSupersetView):
     @has_access
     @expose("/language_pack/<lang>/")
     def language_pack(self, lang: str) -> FlaskResponse:
+        # Allow both underscore and dash locale formats
+        # (eg. "pt_BR" and "pt-BR")
+        # and normalize to the directory naming convention used by Superset.
+        normalized_lang = normalize_locale(lang)
+
         # Only allow expected language formats like "en", "pt_BR", etc.
-        if not re.match(r"^[a-z]{2,3}(_[A-Z]{2})?$", lang):
+        if not re.match(r"^[a-z]{2,3}(_[A-Z]{2})?$", normalized_lang):
             abort(400, "Invalid language code")
 
         base_dir = os.path.join(os.path.dirname(__file__), "..", "translations")
-        file_path = safe_join(base_dir, lang, "LC_MESSAGES", "messages.json")
+        file_path = safe_join(
+            base_dir, normalized_lang, "LC_MESSAGES", "messages.json"
+        )
 
         if file_path and os.path.isfile(file_path):
             return send_file(file_path, mimetype="application/json")

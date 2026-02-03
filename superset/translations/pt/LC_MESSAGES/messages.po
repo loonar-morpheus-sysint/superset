@@ -6755,15 +6755,17 @@ msgstr "Codificação de linhas"
 msgid "Link Copied!"
 msgstr "Link copiado!"
 
+msgid "List Groups"
+msgstr "Listar grupos"
+
 msgid "List Roles"
-msgstr msgstr ""
+msgstr "Listar funções"
 
 msgid "List Unique Values"
 msgstr "Listar valores exclusivos"
 
-#, fuzzy
 msgid "List Users"
-msgstr "Número de divisão"
+msgstr "Listar usuários"
 
 msgid "List of extra columns made available in JavaScript functions"
 msgstr "Lista de colunas extra disponibilizadas em funções JavaScript"
@@ -15152,3 +15154,6 @@ msgstr "área de zoom"
 
 msgid "© Layer attribution"
 msgstr msgstr ""
+
+msgid "Themes"
+msgstr "Temas"

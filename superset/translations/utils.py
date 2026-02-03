@@ -27,6 +27,31 @@ ALL_LANGUAGE_PACKS: dict[str, dict[str, Any]] = {"en": {}}
 DIR = os.path.dirname(os.path.abspath(__file__))
 
 
+def normalize_locale(locale: str) -> str:
+    """Normalize locale codes to Superset's on-disk format.
+
+    Superset translation assets are stored under directories like:
+        superset/translations/pt_BR/LC_MESSAGES/messages.json
+
+    But various clients and integrations may use BCP-47 style locale tags
+    (eg. ``pt-BR``). Normalize these to a safe, canonical form.
+
+    Examples:
+        - ``pt-BR`` -> ``pt_BR``
+        - ``pt_br`` -> ``pt_BR``
+        - ``PT-br`` -> ``pt_BR``
+        - ``en`` -> ``en``
+    """
+    if not locale:
+        return ""
+
+    normalized = locale.strip().replace("-", "_")
+    if "_" in normalized:
+        language, territory = normalized.split("_", 1)
+        return f"{language.lower()}_{territory.upper()}"
+    return normalized.lower()
+
+
 def get_language_pack(locale: str) -> Optional[dict[str, Any]]:
     """Get/cache a language pack
 
@@ -35,20 +60,24 @@ def get_language_pack(locale: str) -> Optional[dict[str, Any]]:
     >>> get_language_pack('fr')['Dashboards']
     "Tableaux de bords"
     """
-    pack = ALL_LANGUAGE_PACKS.get(locale)
+    normalized_locale = normalize_locale(locale)
+    pack = ALL_LANGUAGE_PACKS.get(normalized_locale)
     if not pack:
-        filename = DIR + f"/{locale}/LC_MESSAGES/messages.json"
-        if not locale or locale == "en":
-            # Forcing a dummy, quasy-empty language pack for English since the file
-            # in the en directory is contains data with empty mappings
+        filename = DIR + f"/{normalized_locale}/LC_MESSAGES/messages.json"
+        if not normalized_locale or normalized_locale == "en":
+            # Forcing a dummy, quasi-empty language pack for English since the
+            # file in the en directory contains data with empty mappings.
             filename = DIR + "/empty_language_pack.json"
         try:
             with open(filename, encoding="utf8") as f:
                 pack = json.load(f)
-                ALL_LANGUAGE_PACKS[locale] = pack or {}
+                ALL_LANGUAGE_PACKS[normalized_locale] = pack or {}
         except Exception:  # pylint: disable=broad-except
             logger.error(
-                "Error loading language pack for, falling back on en %s", locale
+                "Error loading language pack for %s (normalized to %s), "
+                "falling back on en",
+                locale,
+                normalized_locale,
             )
             pack = get_language_pack("en")
     return pack
