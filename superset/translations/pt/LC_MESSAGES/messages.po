@@ -302,7 +302,7 @@ msgstr "%s coluna(s)"
 msgid ""
 "%s items could not be tagged because you don’t have edit permissions to "
 "all selected objects."
-msgstr msgstr ""
+msgstr ""
 "%s itens não podem ser marcados porque você não tem permissão de edição "
 "para todos os objetos selecionados."
 
@@ -310,11 +310,11 @@ msgstr msgstr ""
 msgid "%s operator(s)"
 msgstr "%s operador(es)"
 
-#, fuzzy, python-format
+#, python-format
 msgid "%s option"
 msgid_plural "%s options"
 msgstr[0] "%s opção"
-msgstr[1] ""
+msgstr[1] "%s opções"
 
 #, python-format
 msgid "%s option(s)"
@@ -996,9 +996,8 @@ msgstr "Adicionar novo formatador de cores"
 msgid "Add new formatter"
 msgstr "Adicionar novo formatador"
 
-#, fuzzy
 msgid "Add or edit filters"
-msgstr "Adicionar e editar filtros"
+msgstr "Adicionar ou editar filtros"
 
 msgid "Add required control values to preview chart"
 msgstr "Adicionar controle de valores obrigatórios para visualizar o gráfico"
@@ -1295,9 +1294,8 @@ msgstr "Permitir que as colunas sejam reorganizadas"
 msgid "Allow creation of new tables based on queries"
 msgstr "Permitir criação de novas tabelas baseadas em consultas"
 
-#, fuzzy
 msgid "Allow creation of new values"
-msgstr "Permitir criação de novas visualizações baseadas em consultas"
+msgstr "Permitir criação de novos valores"
 
 msgid "Allow creation of new views based on queries"
 msgstr "Permitir criação de novas visualizações baseadas em consultas"
@@ -2665,6 +2663,9 @@ msgstr "A escolha de [Raio do ponto] deve estar presente em [Agrupar por]"
 msgid "Choose File"
 msgstr "Escolher Arquivo"
 
+msgid "Choose..."
+msgstr "Escolha..."
+
 #, fuzzy
 msgid "Choose a chart for displaying on the map"
 msgstr "Escolha um gráfico ou painel, não ambos"
@@ -2800,11 +2801,12 @@ msgstr "Limpar todos os dados"
 msgid "Clear form"
 msgstr "Limpar formulário"
 
-#, fuzzy
 msgid ""
 "Click on \"Add or Edit Filters\" option in Settings to create new "
 "dashboard filters"
-msgstr "Clique no botão\"+Add/Edit Filters\"para criar novos filtros de painel"
+msgstr ""
+"Clique na opção \"Adicionar ou editar filtros\" em Configurações para criar "
+"novos filtros do painel"
 
 #, fuzzy
 msgid ""
@@ -4413,9 +4415,8 @@ msgstr msgstr ""
 "SQL Lab.  Útil para evitar problemas de desempenho do navegador quando se"
 " utilizam bancos de dados com tabelas muito grandes."
 
-#, fuzzy
 msgid "Disable drill to detail"
-msgstr "Drill to detail"
+msgstr "Desativar aprofundamento nos detalhes"
 
 msgid "Disable embedding?"
 msgstr "Desativar incorporação?"
@@ -4423,9 +4424,8 @@ msgstr "Desativar incorporação?"
 msgid "Disabled"
 msgstr "Desativado"
 
-#, fuzzy
 msgid "Disables the drill to detail feature for this database."
-msgstr "Não foram devolvidas amostras para este conjunto de dados"
+msgstr "Desativa o recurso de aprofundamento nos detalhes para este banco de dados."
 
 msgid "Discard"
 msgstr "Descartar"
@@ -4579,29 +4579,31 @@ msgid "Drill by: %s"
 msgstr "Drill by: %s"
 
 msgid "Drill to detail"
-msgstr "Drill to detail"
+msgstr "Aprofundar nos detalhes"
 
 msgid "Drill to detail by"
-msgstr "Drill to detail por"
+msgstr "Aprofundar nos detalhes por"
 
 msgid "Drill to detail by value is not yet supported for this chart type."
-msgstr "Drill to detail por valor ainda não é suportado para esse tipo de gráfico."
+msgstr "Aprofundar nos detalhes por valor ainda não é suportado para esse tipo de gráfico."
 
 msgid ""
 "Drill to detail is disabled because this chart does not group data by "
 "dimension value."
-msgstr msgstr ""
-"Drill to detail está desabilitado porque esse gráfico não agrupar dados "
-"por valor da dimensão."
+msgstr ""
+"O aprofundamento nos detalhes está desativado porque esse gráfico não "
+"agrupa os dados por valor da dimensão."
 
 msgid ""
 "Drill to detail is disabled for this database. Change the database "
 "settings to enable it."
-msgstr msgstr ""
+msgstr ""
+"O aprofundamento nos detalhes está desativado para este banco de dados. "
+"Altere as configurações do banco de dados para habilitá-lo."
 
 #, python-format
 msgid "Drill to detail: %s"
-msgstr "Drill to detail: %s"
+msgstr "Aprofundar nos detalhes: %s"
 
 #, fuzzy
 msgid "Drop a column here or click"
@@ -5491,7 +5493,7 @@ msgid "Fill Color"
 msgstr "Cor de preenchimento"
 
 msgid "Fill all required fields to enable \"Default Value\""
-msgstr "Preencher todos os campos obrigatórios para ativar \"Default Value\""
+msgstr "Preencha todos os campos obrigatórios para habilitar \"Valor padrão\""
 
 msgid "Fill method"
 msgstr "Método de preenchimento"
@@ -6838,6 +6840,24 @@ msgstr "contagem"
 msgid "Login with"
 msgstr "Fazer login com"
 
+msgid "Sign in"
+msgstr "Entrar"
+
+msgid "Sign in with"
+msgstr "Fazer login com"
+
+msgid "Enter your login and password below:"
+msgstr "Digite seu login e senha abaixo:"
+
+msgid "Please enter your username"
+msgstr "Digite seu nome de usuário"
+
+msgid "Please enter your password"
+msgstr "Digite sua senha"
+
+msgid "Register"
+msgstr "Registrar"
+
 msgid "Logout"
 msgstr "Sair"
 
@@ -7536,7 +7556,7 @@ msgid "No form settings were maintained"
 msgstr "Nenhuma configuração de formulário foi mantida"
 
 msgid "No global filters are currently added"
-msgstr "Nenhum filtro global está atualmente adicionado"
+msgstr "Nenhum filtro global foi adicionado até o momento"
 
 msgid "No matching records found"
 msgstr "Não foram encontrados registros correspondentes"
@@ -8164,6 +8184,9 @@ msgstr msgstr ""
 
 msgid "Password"
 msgstr "Senha"
+
+msgid "Password:"
+msgstr "Senha:"
 
 #, fuzzy
 msgid "Password is required"
@@ -9114,9 +9137,9 @@ msgid "Right value"
 msgstr "Valor correto"
 
 msgid "Right-click on a dimension value to drill to detail by that value."
-msgstr msgstr ""
-"Clique com o botão direito do mouse em valor de dimensão para pesquisar "
-"detalhes por esse valor."
+msgstr ""
+"Clique com o botão direito do mouse em um valor de dimensão para "
+"aprofundar nos detalhes por esse valor."
 
 msgid "Role"
 msgstr "Função"
@@ -9840,7 +9863,7 @@ msgid "Select filter plugin using AntD"
 msgstr "Selecione plug-in de filtro usando AntD"
 
 msgid "Select first filter value by default"
-msgstr "Selecione primeiro valor do filtro por padrão"
+msgstr "Selecionar o primeiro valor do filtro por padrão"
 
 #, fuzzy
 msgid "Select format"
@@ -13142,6 +13165,9 @@ msgstr msgstr ""
 msgid "Username"
 msgstr "Nome de usuário"
 
+msgid "Username:"
+msgstr "Nome de usuário:"
+
 #, fuzzy
 msgid "Username is required"
 msgstr "O nome é obrigatório"
@@ -13237,9 +13263,9 @@ msgstr "Valores dependentes de"
 msgid ""
 "Values selected in other filters will affect the filter options to only "
 "show relevant values"
-msgstr msgstr ""
-"Os valores selecionados em outros filtros afetarão as opções de filtro "
-"para mostrar apenas os valores relevantes"
+msgstr ""
+"Os valores selecionados em outros filtros afetarão as opções do filtro "
+"para mostrar apenas valores relevantes"
 
 msgid "Version"
 msgstr "Versão"
