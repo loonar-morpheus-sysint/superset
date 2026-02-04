@@ -204,9 +204,9 @@ msgstr msgstr ""
 "%(dialect)s não pode ser usado como uma fonte de dados por motivos de "
 "segurança."
 
-#, fuzzy, python-format
+#, python-format
 msgid "%(label)s file"
-msgstr "%(type)s do Arquivo"
+msgstr "Arquivo %(label)s"
 
 #, python-format
 msgid "%(name)s.csv"
