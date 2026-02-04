@@ -154,13 +154,22 @@ log() {
   local message="$*"
   local ts
   ts=$(date '+%Y-%m-%d %H:%M:%S')
+  # Sempre grava em arquivo quando configurado.
   if [[ -n "$LOG_FILE" ]]; then
     printf '%s [%s] %s\n' "$ts" "$level" "$message" >>"$LOG_FILE"
-  else
-    printf '%s [%s] %s\n' "$ts" "$level" "$message" >&2
   fi
+
+  # Por padrão, mantenha o terminal “limpo”, mas não esconda erros.
+  # - Se --show_log: ecoa tudo no stdout.
+  # - Caso contrário: ecoa WARN/ERROR no stderr.
   if [[ "$SHOW_LOG" == "true" ]]; then
     printf '%s [%s] %s\n' "$ts" "$level" "$message"
+  else
+    case "$level" in
+      ERROR|WARN)
+        printf '%s [%s] %s\n' "$ts" "$level" "$message" >&2
+        ;;
+    esac
   fi
 }
 
@@ -320,6 +329,9 @@ configure_log_path() {
     printf 'ERROR: Não foi possível criar o arquivo de log em "%s".\n' "$LOG_FILE" >&2
     exit 1
   fi
+
+  # Dica explícita (vai para o stderr e aparece mesmo sem --show_log)
+  printf 'INFO: Logs serão gravados em "%s" (use --show_log para ver no terminal).\n' "$LOG_FILE" >&2
 }
 
 ensure_base_role_exists() {
