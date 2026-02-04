@@ -900,7 +900,6 @@ class Superset(BaseSupersetView):
         return json_success(json.dumps(sanitize_datasource_data(datasource.data)))
 
     @event_logger.log_this
-    @has_access
     @expose("/language_pack/<lang>/")
     def language_pack(self, lang: str) -> FlaskResponse:
         # Allow both underscore and dash locale formats
