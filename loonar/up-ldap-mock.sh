@@ -14,16 +14,40 @@ ENV_FILE="$SCRIPT_DIR/ldap-mock/.env"
 SUPERSET_ENV_FILE="$SCRIPT_DIR/.env"
 BOOTSTRAP_HOST_FILE="$SCRIPT_DIR/ldap-mock/bootstrap/50-loonar-structure.ldif"
 SAM_SCHEMA_HOST_FILE="$SCRIPT_DIR/ldap-mock/schema/50-superset-samaccount.ldif"
-COMPOSE_PROJECT_NAME_VALUE="${COMPOSE_PROJECT_NAME:-$(basename "$PROJECT_ROOT")}"
+# ⚠️ Use um project name dedicado para este compose.
+# Isso evita que `docker compose up` trate containers de outros stacks (ex.: Superset) como "orphans".
+LDAP_MOCK_PROJECT_NAME="${LDAP_MOCK_PROJECT_NAME:-loonar_ldap_mock}"
+COMPOSE_PROJECT_NAME_VALUE="$LDAP_MOCK_PROJECT_NAME"
 
 if ! command -v docker >/dev/null 2>&1; then
     echo "❌ Docker não está instalado ou no PATH"
     exit 1
 fi
 
+if ! docker compose version >/dev/null 2>&1; then
+    echo "❌ Docker Compose (plugin: 'docker compose') não está disponível."
+    echo "   Instale/ative o plugin Docker Compose v2 e tente novamente."
+    exit 1
+fi
+
+if [ ! -f "$COMPOSE_FILE" ]; then
+    echo "❌ Arquivo de compose não encontrado: $COMPOSE_FILE"
+    exit 1
+fi
+
 if [ ! -f "$ENV_FILE" ]; then
     echo "❌ Arquivo $ENV_FILE não encontrado."
     echo "   Copie ldap-mock/.env-sample para ldap-mock/.env e tente novamente."
+    exit 1
+fi
+
+if [ ! -f "$BOOTSTRAP_HOST_FILE" ]; then
+    echo "❌ Arquivo LDIF de bootstrap não encontrado: $BOOTSTRAP_HOST_FILE"
+    exit 1
+fi
+
+if [ ! -f "$SAM_SCHEMA_HOST_FILE" ]; then
+    echo "❌ Arquivo LDIF de schema (sAMAccountName) não encontrado: $SAM_SCHEMA_HOST_FILE"
     exit 1
 fi
 
@@ -77,6 +101,13 @@ select_context() {
     else
         echo "ℹ️  Mantendo contexto atual: $current"
     fi
+
+    # Valida conectividade com o daemon do Docker no contexto escolhido.
+    if ! docker info >/dev/null 2>&1; then
+        echo "❌ Não foi possível conectar ao Docker daemon no contexto '$target'."
+        echo "   Verifique se o host remoto está acessível, credenciais TLS e permissões." 
+        exit 1
+    fi
 }
 
 get_value_from_file() {
@@ -102,6 +133,57 @@ get_env_value() {
     get_value_from_file "$ENV_FILE" "$key" "$default"
 }
 
+cleanup_previous_deployment() {
+    # Remove implantações anteriores do LDAP mock sem afetar o Superset.
+    # 1) derruba recursos do compose do projeto atual
+    # 2) remove container com nome fixo (caso tenha sido criado por outro project name)
+    # 3) remove volumes conhecidos do mock (do project atual e legado "superset")
+
+    echo "🧹 Removendo implantações anteriores do LDAP mock (se existirem)..."
+
+    # Derruba o compose do project atual (seguro por usar -p dedicado).
+    docker compose "${COMPOSE_ARGS[@]}" down -v --remove-orphans >/dev/null 2>&1 || true
+
+    # O docker-compose-ldap-mock.yml define container_name fixo; se ele existir, removemos.
+    if docker ps -a --format '{{.Names}}' | grep -qx 'loonar_mock_ad'; then
+        docker rm -f loonar_mock_ad >/dev/null 2>&1 || true
+    fi
+
+    # Remove volumes do mock (podem ter sido criados com project name antigo, ex.: "superset").
+    local volumes_to_remove=()
+    volumes_to_remove+=("${LDAP_MOCK_PROJECT_NAME}_ldap_mock_db" "${LDAP_MOCK_PROJECT_NAME}_ldap_mock_config")
+    volumes_to_remove+=("superset_ldap_mock_db" "superset_ldap_mock_config")
+    local vol
+    for vol in "${volumes_to_remove[@]}"; do
+        if docker volume inspect "$vol" >/dev/null 2>&1; then
+            docker volume rm "$vol" >/dev/null 2>&1 || true
+        fi
+    done
+}
+
+ensure_service_account_password() {
+    local admin_dn="$1"
+    local admin_password="$2"
+    local service_dn="$3"
+    local service_password="$4"
+
+    # Mantém o diretório consistente com a senha configurada no .env do Superset.
+    # Isso evita "Invalid credentials" (err=49) se o LDIF tiver uma senha diferente.
+    if [ -z "$service_dn" ]; then
+        echo "❌ SERVICE_DN vazio; não é possível ajustar senha da conta de serviço."
+        exit 1
+    fi
+
+    echo "🔑 Ajustando senha da conta de serviço no LDAP para bater com o .env..."
+    if ! docker compose "${COMPOSE_ARGS[@]}" exec -T mock_ad \
+        ldappasswd -H ldap://localhost:389 -x -D "$admin_dn" -w "$admin_password" \
+        -s "$service_password" "$service_dn" >/dev/null 2>&1; then
+        echo "❌ Falha ao ajustar senha da conta de serviço ($service_dn)."
+        docker compose "${COMPOSE_ARGS[@]}" logs --tail=200 mock_ad || true
+        exit 1
+    fi
+}
+
 ensure_network() {
     local network_name
     network_name=$(get_env_value "LDAP_MOCK_NETWORK" "superset")
@@ -113,24 +195,24 @@ ensure_network() {
             return
         fi
 
-        echo "⚠️ Rede '$network_name' existe mas sem labels esperados. Recriando para compatibilidade com o docker-compose principal..."
-        local containers
-        containers=$(docker network inspect -f '{{ range $id, $info := .Containers }}{{$info.Name}} {{ end }}' "$network_name" 2>/dev/null || echo "")
-        if [ -n "$containers" ]; then
-            for container in $containers; do
-                echo "   - Desconectando $container"
-                docker network disconnect -f "$network_name" "$container" >/dev/null 2>&1 || true
-            done
-        fi
-        docker network rm "$network_name" >/dev/null 2>&1 || true
+        # ⚠️ Importante: esta rede pode estar sendo usada por outros stacks (ex.: Superset).
+        # Para garantir que este script só afete o compose do LDAP mock, NÃO fazemos ações destrutivas
+        # (desconectar containers / remover / recriar rede). Apenas reutilizamos a rede existente.
+        echo "⚠️ Rede '$network_name' já existe, mas sem labels esperados."
+        echo "   Mantendo a rede como está para não afetar outros containers."
+        return
     fi
 
     echo "➕ Criando rede Docker '$network_name' (bridge) com labels compatíveis."
-    docker network create \
+    if ! docker network create \
         --driver bridge \
         --label "com.docker.compose.project=$COMPOSE_PROJECT_NAME_VALUE" \
         --label "com.docker.compose.network=$network_name" \
-        "$network_name" >/dev/null
+        "$network_name" >/dev/null; then
+        echo "❌ Falha ao criar a rede Docker '$network_name'."
+        echo "   Verifique permissões do Docker e se já existe uma rede com o mesmo nome." 
+        exit 1
+    fi
 }
 
 get_current_suffix() {
@@ -176,7 +258,7 @@ ensure_suffix_matches_base() {
 
     echo "⚠️ Sufixo atual do diretório é '$current_suffix', mas o esperado é '$BASE_DN'. Recriando volume para alinhar..."
     docker compose "${COMPOSE_ARGS[@]}" down -v
-    docker compose "${COMPOSE_ARGS[@]}" up -d --build --remove-orphans
+    docker compose "${COMPOSE_ARGS[@]}" up -d --build
 
     current_suffix=$(get_current_suffix 12 || true)
     normalized_current=$(echo "$current_suffix" | tr '[:upper:]' '[:lower:]')
@@ -342,13 +424,14 @@ prompt_restart_superset() {
 select_context
 ensure_network
 
-COMPOSE_ARGS=(--env-file "$ENV_FILE" -f "$COMPOSE_FILE")
+COMPOSE_ARGS=(-p "$LDAP_MOCK_PROJECT_NAME" --env-file "$ENV_FILE" -f "$COMPOSE_FILE")
 
 echo "🧪 Validando configuração do docker compose..."
 docker compose "${COMPOSE_ARGS[@]}" config >/dev/null
 
 echo "📦 Subindo mock do Active Directory..."
-docker compose "${COMPOSE_ARGS[@]}" up -d --build --remove-orphans
+cleanup_previous_deployment
+docker compose "${COMPOSE_ARGS[@]}" up -d --pull always --force-recreate
 
 echo ""
 echo "📊 Status do mock AD:"
@@ -381,6 +464,7 @@ wait_for_bind "$ADMIN_DN" "$ADMIN_PASSWORD" "admin"
 
 ensure_sam_account_schema "$SAM_SCHEMA_LDIF"
 reset_mock_directory "$ADMIN_DN" "$ADMIN_PASSWORD" "$BOOTSTRAP_LDIF"
+ensure_service_account_password "$ADMIN_DN" "$ADMIN_PASSWORD" "$SERVICE_DN" "$SERVICE_PASSWORD"
 ensure_service_account_acl "$ADMIN_DN" "$READONLY_DN" "$SERVICE_DN" "$READONLY_USER_ENABLED"
 
 echo ""
@@ -397,10 +481,11 @@ cat <<EOF
    - Host/porta: ldap://$MOCK_HOST:$PORT
    - Base DN: $BASE_DN
    - Conta de serviço: CN=Morpheus Serviços,OU=BR-BH,OU=03-SERVICOS,$BASE_DN
-    - Senha da conta de serviço: Morph&us#2020
+    - Senha da conta de serviço: $SERVICE_PASSWORD
     - Usuário de testes: CN=Joana Superset,OU=04-CLIENTES,$BASE_DN (Senha: #@!123)
 
 Use estes valores no .env do Superset para apontar para o mock quando necessário.
 EOF
 
-prompt_restart_superset
+echo ""
+echo "ℹ️  Para evitar impacto no Superset, este script NÃO reinicia containers do Superset."
