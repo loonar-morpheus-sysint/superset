@@ -437,13 +437,14 @@ const RightMenu = ({
 
         section.childs?.forEach(child => {
           if (typeof child !== 'string') {
+            const translatedLabel = t(child.label);
             const menuItemDisplay = RightMenuItemIconExtension ? (
               <StyledMenuItemWithIcon>
-                {child.label}
+                {translatedLabel}
                 <RightMenuItemIconExtension menuChild={child} />
               </StyledMenuItemWithIcon>
             ) : (
-              child.label
+              translatedLabel
             );
 
             sectionItems.push({
@@ -468,7 +469,7 @@ const RightMenu = ({
 
         items.push({
           type: 'group',
-          label: section.label,
+          label: t(section.label),
           key: section.label,
           children: sectionItems,
         });

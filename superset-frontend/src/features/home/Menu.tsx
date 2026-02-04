@@ -17,7 +17,7 @@
  * under the License.
  */
 import { useState, useEffect } from 'react';
-import { styled, css, useTheme } from '@superset-ui/core';
+import { styled, css, useTheme, t } from '@superset-ui/core';
 import { getUrlParam } from 'src/utils/urlUtils';
 import { MainNav, MenuItem } from '@superset-ui/core/components/Menu';
 import { Tooltip, Grid, Row, Col, Image } from '@superset-ui/core/components';
@@ -238,12 +238,13 @@ export function Menu({
     url,
     isFrontendRoute,
   }: MenuObjectProps): MenuItem => {
+    const translatedLabel = t(label);
     if (url && isFrontendRoute) {
       return {
         key: label,
         label: (
           <NavLink role="button" to={url} activeClassName="is-active">
-            {label}
+            {translatedLabel}
           </NavLink>
         ),
       };
@@ -252,7 +253,7 @@ export function Menu({
     if (url) {
       return {
         key: label,
-        label: <Typography.Link href={url}>{label}</Typography.Link>,
+        label: <Typography.Link href={url}>{translatedLabel}</Typography.Link>,
       };
     }
 
@@ -261,14 +262,15 @@ export function Menu({
       if (typeof child === 'string' && child === '-' && label !== 'Data') {
         childItems.push({ type: 'divider', key: `divider-${index1}` });
       } else if (typeof child !== 'string') {
+        const translatedChildLabel = t(child.label);
         childItems.push({
           key: `${child.label}`,
           label: child.isFrontendRoute ? (
             <NavLink to={child.url || ''} exact activeClassName="is-active">
-              {child.label}
+              {translatedChildLabel}
             </NavLink>
           ) : (
-            <Typography.Link href={child.url}>{child.label}</Typography.Link>
+            <Typography.Link href={child.url}>{translatedChildLabel}</Typography.Link>
           ),
         });
       }
@@ -276,7 +278,7 @@ export function Menu({
 
     return {
       key: label,
-      label,
+      label: translatedLabel,
       icon: <Icons.DownOutlined iconSize="xs" />,
       popupOffset: NAVBAR_MENU_POPUP_OFFSET,
       children: childItems,
