@@ -16,7 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-import { Suspense, useEffect } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { hot } from 'react-hot-loader/root';
 import {
   BrowserRouter as Router,
@@ -70,42 +70,62 @@ const LocationPathnameLogger = () => {
   return <></>;
 };
 
-const App = () => (
-  <Router basename={applicationRoot()}>
-    <ScrollToTop />
-    <LocationPathnameLogger />
-    <RootContextProviders>
-      <Menu
-        data={bootstrapData.common.menu_data}
-        isFrontendRoute={isFrontendRoute}
-      />
-      <Switch>
-        {routes.map(({ path, Component, props = {}, Fallback = Loading }) => (
-          <Route path={path} key={path}>
-            <Suspense fallback={<Fallback />}>
-              <Layout>
-                <Layout.Content
-                  css={css`
-                    display: flex;
-                    flex-direction: column;
-                  `}
-                >
-                  <ErrorBoundary
+const App = () => {
+  const [i18nReady, setI18nReady] = useState(
+    () => window.__languagePackReady === undefined,
+  );
+
+  useEffect(() => {
+    if (!window.__languagePackReady) {
+      return undefined;
+    }
+    window.__languagePackReady.finally(() => {
+      setI18nReady(true);
+    });
+    return undefined;
+  }, []);
+
+  if (!i18nReady) {
+    return <Loading />;
+  }
+
+  return (
+    <Router basename={applicationRoot()}>
+      <ScrollToTop />
+      <LocationPathnameLogger />
+      <RootContextProviders>
+        <Menu
+          data={bootstrapData.common.menu_data}
+          isFrontendRoute={isFrontendRoute}
+        />
+        <Switch>
+          {routes.map(({ path, Component, props = {}, Fallback = Loading }) => (
+            <Route path={path} key={path}>
+              <Suspense fallback={<Fallback />}>
+                <Layout>
+                  <Layout.Content
                     css={css`
-                      margin: 16px;
+                      display: flex;
+                      flex-direction: column;
                     `}
                   >
-                    <Component user={bootstrapData.user} {...props} />
-                  </ErrorBoundary>
-                </Layout.Content>
-              </Layout>
-            </Suspense>
-          </Route>
-        ))}
-      </Switch>
-      <ToastContainer />
-    </RootContextProviders>
-  </Router>
-);
+                    <ErrorBoundary
+                      css={css`
+                        margin: 16px;
+                      `}
+                    >
+                      <Component user={bootstrapData.user} {...props} />
+                    </ErrorBoundary>
+                  </Layout.Content>
+                </Layout>
+              </Suspense>
+            </Route>
+          ))}
+        </Switch>
+        <ToastContainer />
+      </RootContextProviders>
+    </Router>
+  );
+};
 
 export default hot(App);
