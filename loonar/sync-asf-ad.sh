@@ -19,16 +19,69 @@ declare -a UPDATED_ROLES=()
 declare -a FAILED_ROLES=()
 
 load_env_file() {
-  local env_file="$SCRIPT_DIR/.env"
+  local env_file="${LOONAR_ENV_FILE:-$SCRIPT_DIR/.env}"
   if [[ ! -f "$env_file" ]]; then
-    printf 'ERROR: Arquivo .env não encontrado em "%s".\n' "$SCRIPT_DIR" >&2
+    printf 'ERROR: Arquivo .env não encontrado em "%s".\n' "$env_file" >&2
     exit 1
   fi
 
-  # shellcheck disable=SC2046
-  export $(grep -v '^\s*#' "$env_file" | grep -v '^\s*$' | xargs)
+  # Carregamento no formato dotenv (não é shell): suporta espaços e caracteres especiais.
+  # Exemplos que quebram `export $(... | xargs)`:
+  #   LOONAR_LDAP_BIND_DN_REAL=CN=Morpheus Serviços,...   (contém espaço)
+  #   LOONAR_LDAP_BIND_PASSWORD_REAL=Morph&us#2020       (& é metacaractere)
+  local loaded=0
+  local skipped=0
+  local line key value
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    # Remove CR (arquivos com \r\n)
+    line="${line%$'\r'}"
 
-  printf 'INFO: Arquivo .env carregado com sucesso.\n' >&2
+    # Trim à esquerda
+    line="${line#"${line%%[![:space:]]*}"}"
+
+    # Ignora vazias/comentários
+    [[ -z "$line" ]] && continue
+    [[ "$line" =~ ^# ]] && continue
+
+    # Permite prefixo 'export '
+    if [[ "$line" == export\ * ]]; then
+      line="${line#export }"
+      line="${line#"${line%%[![:space:]]*}"}"
+    fi
+
+    # Precisa ter '='
+    if [[ "$line" != *"="* ]]; then
+      ((++skipped))
+      continue
+    fi
+
+    key="${line%%=*}"
+    value="${line#*=}"
+
+    # Trim key/value
+    key="${key#"${key%%[![:space:]]*}"}"
+    key="${key%"${key##*[![:space:]]}"}"
+    value="${value#"${value%%[![:space:]]*}"}"
+    value="${value%"${value##*[![:space:]]}"}"
+
+    # Remove aspas simples/duplas ao redor (dotenv comum)
+    if [[ ${#value} -ge 2 ]]; then
+      if [[ ("$value" == '"'*'"') || ("$value" == "'"*"'") ]]; then
+        value="${value:1:${#value}-2}"
+      fi
+    fi
+
+    # Valida nome da variável (evita linhas inválidas)
+    if [[ ! "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+      ((++skipped))
+      continue
+    fi
+
+    export "$key=$value"
+    ((++loaded))
+  done < "$env_file"
+
+  printf 'INFO: Arquivo .env carregado com sucesso: %s (vars=%s, ignoradas=%s).\n' "$env_file" "$loaded" "$skipped" >&2
 }
 
 validate_env_vars() {
@@ -203,8 +256,9 @@ normalize_ldap_uri() {
 }
 
 resolve_ldap_context() {
-  local LDAP_URI LDAP_BIND_DN LDAP_BIND_PASSWORD LDAP_GROUP_BASE
-
+  # NÃO declare LDAP_* como local aqui.
+  # Em Bash, variáveis têm escopo dinâmico: o chamador (ex: fetch_ad_groups)
+  # declara `local LDAP_URI ...` e esta função deve preencher esses valores.
   case "${LOONAR_LDAP_MODE,,}" in
     real)
       LDAP_URI="$(normalize_ldap_uri "$LOONAR_LDAP_SERVER_REAL" "${LOONAR_LDAP_USE_SSL_REAL:-false}")"
@@ -436,7 +490,5 @@ main() {
   process_groups
   summarize
 }
-
-main "$@"
 
 main "$@"
