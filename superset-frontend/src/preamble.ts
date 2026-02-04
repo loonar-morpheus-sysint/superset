@@ -62,7 +62,7 @@ setupFormatters(effectiveD3NumberFormat, bootstrapData.common.d3_time_format);
 setupClient({ appRoot: applicationRoot() });
 
 // Load language pack before anything else
-(async () => {
+const languagePackReady: Promise<void> = (async () => {
   const lang = bootstrapData.common.locale || 'en';
   if (lang !== 'en') {
     try {
@@ -72,6 +72,7 @@ setupClient({ appRoot: applicationRoot() });
       });
       configure({ languagePack: json as LanguagePack });
       dayjs.locale(lang);
+      return;
     } catch (err) {
       console.warn(
         'Failed to fetch language pack, falling back to default.',
@@ -81,6 +82,11 @@ setupClient({ appRoot: applicationRoot() });
       dayjs.locale('en');
     }
   }
+})();
+
+window.__languagePackReady = languagePackReady;
+
+languagePackReady.then(() => {
 
   // Continue with rest of setup
   initFeatureFlags(bootstrapData.common.feature_flags);
@@ -106,4 +112,4 @@ setupClient({ appRoot: applicationRoot() });
       }
     });
   }
-})();
+});

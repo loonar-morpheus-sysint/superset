@@ -17,3 +17,7 @@
  * under the License.
  */
 declare var __webpack_public_path__: string;
+
+interface Window {
+	__languagePackReady?: Promise<void>;
+}
