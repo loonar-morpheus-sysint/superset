@@ -127,9 +127,23 @@ class LoonarSecurityManager(SupersetSecurityManager):
 
     def auth_user_ldap(self, username: str, password: str) -> Optional[User]:
         try:
+            # Verifica se o usuário já existe no banco ANTES da autenticação
+            existing_user = self.find_user(username=username)
+            is_new_user = existing_user is None
+            
             user = super().auth_user_ldap(username, password)
-            if user:
+            if user and is_new_user:
+                # Sincroniza roles apenas para usuários novos (primeira vez fazendo login)
+                logger.info(
+                    f"Novo usuário LDAP detectado: {username}. "
+                    "Sincronizando roles dos grupos LDAP."
+                )
                 self._sync_roles_from_ldap_groups(user, username)
+            elif user and not is_new_user:
+                logger.debug(
+                    f"Usuário LDAP existente: {username}. "
+                    "Mantendo roles atuais (sincronização desabilitada)."
+                )
             return user
         except Exception as e:
             logger.error(
