@@ -2453,9 +2453,8 @@ msgstr "Mudar ordem das linhas."
 msgid "Changed by"
 msgstr "Alterado por"
 
-#, fuzzy
 msgid "Changed on"
-msgstr "mudança"
+msgstr "Alterado em"
 
 msgid "Changes saved."
 msgstr "Alterações salvas."
@@ -4861,9 +4860,8 @@ msgstr "Nome de usuário ou a senha está incorreto."
 msgid "Elevation"
 msgstr "Elevação"
 
-#, fuzzy
 msgid "Email"
-msgstr "Totais"
+msgstr "E-mail"
 
 #, fuzzy
 msgid "Email is required"
@@ -5035,11 +5033,11 @@ msgstr msgstr ""
 
 #, fuzzy
 msgid "Enter the user's first name"
-msgstr "Nome do alerta"
+msgstr "Digite o nome do usuário"
 
 #, fuzzy
 msgid "Enter the user's last name"
-msgstr "Nome do alerta"
+msgstr "Digite o sobrenome do usuário"
 
 msgid "Enter the user's username"
 msgstr msgstr ""
@@ -5385,7 +5383,7 @@ msgid "Factor to multiply the metric by"
 msgstr "Fator para multiplicar a métrica por"
 
 msgid "Fail login count"
-msgstr msgstr ""
+msgstr "Total de Login"
 
 msgid "Failed"
 msgstr "Falhou"
@@ -5604,9 +5602,8 @@ msgstr "Finalizar"
 msgid "First"
 msgstr "Primeiro"
 
-#, fuzzy
 msgid "First name"
-msgstr "Nome do gráfico"
+msgstr "Nome"
 
 #, fuzzy
 msgid "First name is required"
@@ -5890,6 +5887,9 @@ msgstr "Agrupar por"
 
 msgid "Group by"
 msgstr "Agrupar por"
+
+msgid "Groups"
+msgstr "Grupos"
 
 msgid "Guest user cannot modify chart payload"
 msgstr msgstr ""
@@ -6531,9 +6531,8 @@ msgstr "Último valor disponível visto em %s"
 msgid "Last day"
 msgstr "último dia"
 
-#, fuzzy
 msgid "Last login"
-msgstr "mês passado"
+msgstr "Último login"
 
 msgid "Last modified"
 msgstr "Última modificação"
@@ -6542,9 +6541,8 @@ msgstr "Última modificação"
 msgid "Last month"
 msgstr "mês passado"
 
-#, fuzzy
 msgid "Last name"
-msgstr "nome do conjunto de dados"
+msgstr "Sobrenome"
 
 #, fuzzy
 msgid "Last name is required"
@@ -6835,9 +6833,8 @@ msgstr "Eixo y logarítmico"
 msgid "Login"
 msgstr "Entrar"
 
-#, fuzzy
 msgid "Login count"
-msgstr "contagem"
+msgstr "Contagem de login"
 
 msgid "Login with"
 msgstr "Fazer login com"
