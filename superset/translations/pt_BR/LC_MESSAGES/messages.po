@@ -8252,9 +8252,8 @@ msgstr "Períodos"
 msgid "Periods must be a whole number"
 msgstr "Os períodos devem ser um número inteiro"
 
-#, fuzzy
 msgid "Permissions"
-msgstr "Versão"
+msgstr "Permissões"
 
 #, python-format
 msgid "Permissions successfully synced for %s"
@@ -13171,9 +13170,8 @@ msgstr "Nome de usuário:"
 msgid "Username is required"
 msgstr "O nome é obrigatório"
 
-#, fuzzy
 msgid "Users"
-msgstr "série"
+msgstr "Usuários"
 
 #, fuzzy
 msgid "Users are not allowed to set a search path for security reasons."
