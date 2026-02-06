@@ -65,6 +65,7 @@ from superset.superset_typing import FlaskResponse
 from superset.themes.utils import (
     is_valid_theme,
 )
+from superset.translations.utils import normalize_locale
 from superset.utils import core as utils, json
 from superset.utils.filters import get_dataset_access_filters
 from superset.views.error_handling import json_error_response
@@ -403,7 +404,7 @@ def cached_common_bootstrap_data(  # pylint: disable=unused-argument
         and bool(available_specs[GSheetsEngineSpec])
     )
 
-    language = locale.language if locale else "en"
+    language = normalize_locale(str(locale)) if locale else "en"
     auth_type = app.config["AUTH_TYPE"]
     auth_user_registration = app.config["AUTH_USER_REGISTRATION"]
     frontend_config["AUTH_USER_REGISTRATION"] = auth_user_registration
