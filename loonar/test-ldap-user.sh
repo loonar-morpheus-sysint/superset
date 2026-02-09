@@ -62,20 +62,18 @@ separator() {
 # =============================
 
 load_env() {
-    # Procurar .env-prod primeiro, depois .env
     local env_file=""
 
-    if [ -f "loonar/.env-prod" ]; then
-        env_file="loonar/.env-prod"
-    elif [ -f "loonar/.env" ]; then
-        env_file="loonar/.env"
+    if [ -f ".env" ]; then
+        env_file=".env"
     else
-        log_error "Arquivo de configuração não encontrado (.env ou .env-prod)"
+        log_error "Arquivo de configuração não encontrado (${PWD}/.env )"
         exit 1
     fi
 
     # Carregar variáveis do arquivo .env com proteção contra caracteres especiais
     set -a
+    # shellcheck disable=SC1090
     source "$env_file" 2>/dev/null || true
     set +a
 
@@ -94,12 +92,17 @@ load_env() {
         LDAP_USER_BASE="$LOONAR_LDAP_USER_BASE_REAL"
         LDAP_GROUP_BASE="$LOONAR_LDAP_GROUP_BASE_REAL"
     else
-        LDAP_SERVER="$LOONAR_LDAP_SERVER_MOCK_INTERNAL"
+        LDAP_SERVER="$LOONAR_LDAP_SERVER_MOCK"
         LDAP_BIND_DN="$LOONAR_LDAP_BIND_DN_MOCK"
         LDAP_BIND_PASSWORD="$LOONAR_LDAP_BIND_PASSWORD_MOCK"
-        LDAP_USER_BASE="${LOONAR_LDAP_USER_BASE_REAL:-OU=04-CLIENTES,DC=loonardc,DC=local}"
-        LDAP_GROUP_BASE="${LOONAR_LDAP_GROUP_BASE_REAL:-OU=04-CLIENTES,DC=loonardc,DC=local}"
+        LDAP_USER_BASE="$LOONAR_LDAP_USER_BASE_MOCK"
+        LDAP_GROUP_BASE="$LOONAR_LDAP_GROUP_BASE_MOCK"
     fi
+
+    # Variáveis comuns (independem de mock/real)
+    LDAP_GROUP_FILTERTERM="$LOONAR_LDAP_GROUP_FILTERTERM"
+    LDAP_BASE_ROLE="$LOONAR_LDAP_BASE_ROLE"
+    LDAP_EMAIL_DOMAIN="$LOONAR_LDAP_EMAIL_DOMAIN"
 }
 
 # =============================
@@ -214,6 +217,9 @@ test_superset_config() {
     log_success "Servidor LDAP = $LDAP_SERVER"
     log_success "Base de usuários = $LDAP_USER_BASE"
     log_success "Base de grupos = $LDAP_GROUP_BASE"
+    log_success "Filtro de grupo = $LDAP_GROUP_FILTERTERM"
+    log_success "Role base = $LDAP_BASE_ROLE"
+    log_success "Domínio de e-mail = $LDAP_EMAIL_DOMAIN"
 
     return 0
 }
