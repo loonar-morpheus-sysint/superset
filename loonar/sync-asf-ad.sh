@@ -1,342 +1,131 @@
 #!/usr/bin/env bash
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
 set -euo pipefail
 IFS=$'\n\t'
 
-SCRIPT_PATH="${BASH_SOURCE[0]}"
-SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
-SCRIPT_NAME="$(basename "$SCRIPT_PATH")"
+# =============================
+# CARREGAR VARIÁVEIS DE AMBIENTE DO .env
+# =============================
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ENV_FILE=""
 
-LOG_PATH="$SCRIPT_DIR"
-LOG_FILE=""
-
-DEBUG=false
-SHOW_LOG=false
-RETAIN_LOGS_MAX_DAYS=7
-
-declare -a AD_GROUPS=()
-declare -a CREATED_ROLES=()
-declare -a UPDATED_ROLES=()
-declare -a FAILED_ROLES=()
-
-load_env_file() {
-  local env_file="${LOONAR_ENV_FILE:-$SCRIPT_DIR/.env}"
-  if [[ ! -f "$env_file" ]]; then
-    printf 'ERROR: Arquivo .env não encontrado em "%s".\n' "$env_file" >&2
-    exit 1
-  fi
-
-  # Carregamento no formato dotenv (não é shell): suporta espaços e caracteres especiais.
-  # Exemplos que quebram `export $(... | xargs)`:
-  #   LOONAR_LDAP_BIND_DN_REAL=CN=Morpheus Serviços,...   (contém espaço)
-  #   LOONAR_LDAP_BIND_PASSWORD_REAL=Morph&us#2020       (& é metacaractere)
-  local loaded=0
-  local skipped=0
-  local line key value
-  while IFS= read -r line || [[ -n "$line" ]]; do
-    # Remove CR (arquivos com \r\n)
-    line="${line%$'\r'}"
-
-    # Trim à esquerda
-    line="${line#"${line%%[![:space:]]*}"}"
-
-    # Ignora vazias/comentários
-    [[ -z "$line" ]] && continue
-    [[ "$line" =~ ^# ]] && continue
-
-    # Permite prefixo 'export '
-    if [[ "$line" == export\ * ]]; then
-      line="${line#export }"
-      line="${line#"${line%%[![:space:]]*}"}"
-    fi
-
-    # Precisa ter '='
-    if [[ "$line" != *"="* ]]; then
-      ((++skipped))
-      continue
-    fi
-
-    key="${line%%=*}"
-    value="${line#*=}"
-
-    # Trim key/value
-    key="${key#"${key%%[![:space:]]*}"}"
-    key="${key%"${key##*[![:space:]]}"}"
-    value="${value#"${value%%[![:space:]]*}"}"
-    value="${value%"${value##*[![:space:]]}"}"
-
-    # Remove aspas simples/duplas ao redor (dotenv comum)
-    if [[ ${#value} -ge 2 ]]; then
-      if [[ ("$value" == '"'*'"') || ("$value" == "'"*"'") ]]; then
-        value="${value:1:${#value}-2}"
-      fi
-    fi
-
-    # Valida nome da variável (evita linhas inválidas)
-    if [[ ! "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
-      ((++skipped))
-      continue
-    fi
-
-    export "$key=$value"
-    ((++loaded))
-  done < "$env_file"
-
-  printf 'INFO: Arquivo .env carregado com sucesso: %s (vars=%s, ignoradas=%s).\n' "$env_file" "$loaded" "$skipped" >&2
-}
-
-validate_env_vars() {
-  local missing=()
-
-  [[ -z "${LOONAR_LDAP_MODE:-}" ]] && missing+=("LOONAR_LDAP_MODE")
-  [[ -z "${LOONAR_SUPERSET_BASE_ROLE:-}" ]] && missing+=("LOONAR_SUPERSET_BASE_ROLE")
-
-  case "${LOONAR_LDAP_MODE,,}" in
-    real)
-      [[ -z "${LOONAR_LDAP_SERVER_REAL:-}" ]] && missing+=("LOONAR_LDAP_SERVER_REAL")
-      [[ -z "${LOONAR_LDAP_BIND_DN_REAL:-}" ]] && missing+=("LOONAR_LDAP_BIND_DN_REAL")
-      [[ -z "${LOONAR_LDAP_BIND_PASSWORD_REAL:-}" ]] && missing+=("LOONAR_LDAP_BIND_PASSWORD_REAL")
-      [[ -z "${LOONAR_LDAP_GROUP_BASE_REAL:-}" ]] && missing+=("LOONAR_LDAP_GROUP_BASE_REAL")
-      ;;
-    mock)
-      if [[ -z "${LOONAR_LDAP_SERVER_MOCK:-}" && -z "${LOONAR_LDAP_SERVER_MOCK_INTERNAL:-}" ]]; then
-        missing+=("LOONAR_LDAP_SERVER_MOCK|LOONAR_LDAP_SERVER_MOCK_INTERNAL")
-      fi
-      [[ -z "${LOONAR_LDAP_BIND_DN_MOCK:-}" ]] && missing+=("LOONAR_LDAP_BIND_DN_MOCK")
-      [[ -z "${LOONAR_LDAP_BIND_PASSWORD_MOCK:-}" ]] && missing+=("LOONAR_LDAP_BIND_PASSWORD_MOCK")
-      [[ -z "${LOONAR_LDAP_GROUP_BASE_MOCK:-}" ]] && missing+=("LOONAR_LDAP_GROUP_BASE_MOCK")
-      ;;
-    *)
-      printf 'ERROR: Valor inválido para LOONAR_LDAP_MODE (use "real" ou "mock").\n' >&2
-      exit 1
-      ;;
-  esac
-
-  if (( ${#missing[@]} > 0 )); then
-    printf 'ERROR: Variáveis obrigatórias ausentes no .env: %s\n' "${missing[*]}" >&2
-    exit 1
-  fi
-}
-
-usage() {
-  cat <<EOF
-Uso: $SCRIPT_NAME [--retain_logs_max_days "<dias>"] [--log_path "/dir/logs"] \
-                  [--debug] [--show_log]
-
-Variáveis carregadas do .env:
-  LOONAR_LDAP_MODE               Define se usa LDAP real ou mock
-  LOONAR_LDAP_SERVER_REAL        URI/host do LDAP real
-  LOONAR_LDAP_BIND_DN_REAL       Bind DN do LDAP real
-  LOONAR_LDAP_BIND_PASSWORD_REAL Senha do LDAP real
-  LOONAR_LDAP_GROUP_BASE_REAL    Base DN de grupos (real)
-  LOONAR_LDAP_USE_SSL_REAL       true|false
-
-  LOONAR_LDAP_SERVER_MOCK        URI/host do LDAP mock
-  LOONAR_LDAP_SERVER_MOCK_INTERNAL URI/host interno do LDAP mock (prioridade)
-  LOONAR_LDAP_BIND_DN_MOCK       Bind DN do LDAP mock
-  LOONAR_LDAP_BIND_PASSWORD_MOCK Senha do LDAP mock
-  LOONAR_LDAP_GROUP_BASE_MOCK    Base DN de grupos (mock)
-  LOONAR_LDAP_USE_SSL_MOCK       true|false
-
-  LOONAR_SUPERSET_BASE_ROLE      Role base do Superset para copiar permissões (obrigatória)
-  LOONAR_LDAP_CN_TERM            Termo opcional que deve aparecer no CN dos grupos (filtro)
-
-Parâmetros opcionais:
-  --retain_logs_max_days  Dias de retenção dos logs (padrão 7)
-  --log_path              Diretório onde os logs serão gravados (padrão: diretório do script)
-  --debug                 Registra no log a saída completa dos comandos
-  --show_log              Exibe as mensagens também no stdout
-  -h, --help              Mostra esta ajuda
-EOF
-}
-
-log() {
-  local level="$1"; shift
-  local message="$*"
-  local ts
-  ts=$(date '+%Y-%m-%d %H:%M:%S')
-  # Sempre grava em arquivo quando configurado.
-  if [[ -n "$LOG_FILE" ]]; then
-    printf '%s [%s] %s\n' "$ts" "$level" "$message" >>"$LOG_FILE"
-  fi
-
-  # Por padrão, mantenha o terminal “limpo”, mas não esconda erros.
-  # - Se --show_log: ecoa tudo no stdout.
-  # - Caso contrário: ecoa WARN/ERROR no stderr.
-  if [[ "$SHOW_LOG" == "true" ]]; then
-    printf '%s [%s] %s\n' "$ts" "$level" "$message"
-  else
-    case "$level" in
-      ERROR|WARN)
-        printf '%s [%s] %s\n' "$ts" "$level" "$message" >&2
-        ;;
-    esac
-  fi
-}
-
-exit_with_help() {
-  log ERROR "$1"
-  usage >&2
+if [[ -f "${SCRIPT_DIR}/.env" ]]; then
+  ENV_FILE="${SCRIPT_DIR}/.env"
+else
+  echo "Arquivo de configuração não encontrado em .env)" >&2
   exit 1
-}
+fi
 
-expect_value() {
-  local option="$1"
-  local value="$2"
-  if [[ -z "$value" || "$value" == --* ]]; then
-    exit_with_help "O parâmetro $option requer um valor válido."
-  fi
-}
+set -a
+# shellcheck disable=SC1090
+source "$ENV_FILE" 2>/dev/null || true
+set +a
 
-parse_args() {
-  while [[ $# -gt 0 ]]; do
-    case "$1" in
-      --retain_logs_max_days)
-        local value="${2-}"
-        expect_value "$1" "$value"
-        RETAIN_LOGS_MAX_DAYS="$value"
-        shift 2
-        ;;
-      --retain_logs_max_days=*)
-        RETAIN_LOGS_MAX_DAYS="${1#*=}"
-        shift
-        ;;
-      --log_path)
-        local value="${2-}"
-        expect_value "$1" "$value"
-        LOG_PATH="$value"
-        shift 2
-        ;;
-      --log_path=*)
-        LOG_PATH="${1#*=}"
-        shift
-        ;;
-      --debug)
-        DEBUG=true
-        shift
-        ;;
-      --show_log)
-        SHOW_LOG=true
-        shift
-        ;;
-      -h|--help)
-        usage
-        exit 0
-        ;;
-      *)
-        exit_with_help "Parâmetro desconhecido: $1"
-        ;;
-    esac
-  done
-}
+if [[ -z "${LOONAR_LDAP_MODE:-}" ]]; then
+  echo "LOONAR_LDAP_MODE não está definido no $ENV_FILE" >&2
+  exit 1
+fi
 
-validate_params() {
-  if [[ ! "$RETAIN_LOGS_MAX_DAYS" =~ ^[0-9]+$ ]] || (( RETAIN_LOGS_MAX_DAYS <= 0 )); then
-    exit_with_help "O parâmetro --retain_logs_max_days deve ser um inteiro positivo."
-  fi
+if [[ "$LOONAR_LDAP_MODE" == "real" ]]; then
+  AD_URI="$LOONAR_LDAP_SERVER_REAL"
+  AD_DN_BASE="$LOONAR_LDAP_USER_BASE_REAL"
+  AD_SVC_USER="$LOONAR_LDAP_BIND_DN_REAL"
+  AD_SVC_PASSWORD="$LOONAR_LDAP_BIND_PASSWORD_REAL"
+else
+  AD_URI="$LOONAR_LDAP_SERVER_MOCK"
+  AD_DN_BASE="$LOONAR_LDAP_USER_BASE_MOCK"
+  AD_SVC_USER="$LOONAR_LDAP_BIND_DN_MOCK"
+  AD_SVC_PASSWORD="$LOONAR_LDAP_BIND_PASSWORD_MOCK"
+fi
+
+# Variáveis comuns (independem de mock/real)
+AD_GROUP_FILTERTERM="$LOONAR_LDAP_GROUP_FILTERTERM"
+ASF_ROLE_BASE="$LOONAR_LDAP_BASE_ROLE"
+AD_EMAIL_INVALID="$LOONAR_LDAP_EMAIL_DOMAIN"
+SUPERSET_CONTAINER_NAME="superset_app"
+AD_GROUPS=()
+RESOLVED_SUPERSET_CONTAINER=""
+
+exit_with_error() {
+  printf '%s\n' "$1" >&2
+  exit 1
 }
 
 ensure_command() {
   local bin="$1"
   if ! command -v "$bin" >/dev/null 2>&1; then
-    exit_with_help "Dependência obrigatória não encontrada: $bin"
+    exit_with_error "Dependência obrigatória não encontrada: $bin"
   fi
 }
 
 ensure_container_running() {
-  if ! docker inspect -f '{{.State.Running}}' superset_app >/dev/null 2>&1; then
-    exit_with_help "O container 'superset_app' não está em execução ou não existe."
-  fi
-}
+  local candidates=()
+  candidates+=("$SUPERSET_CONTAINER_NAME")
+  candidates+=("superset-$SUPERSET_CONTAINER_NAME")
+  local name=""
 
-normalize_ldap_uri() {
-  local server="$1"
-  local use_ssl="$2"
-
-  if [[ "$server" =~ ^ldaps?:// ]]; then
-    echo "$server"
-    return
-  fi
-
-  local scheme="ldap"
-  if [[ "${use_ssl,,}" == "true" ]]; then
-    scheme="ldaps"
-  fi
-  echo "${scheme}://${server}"
-}
-
-resolve_ldap_context() {
-  # NÃO declare LDAP_* como local aqui.
-  # Em Bash, variáveis têm escopo dinâmico: o chamador (ex: fetch_ad_groups)
-  # declara `local LDAP_URI ...` e esta função deve preencher esses valores.
-  case "${LOONAR_LDAP_MODE,,}" in
-    real)
-      LDAP_URI="$(normalize_ldap_uri "$LOONAR_LDAP_SERVER_REAL" "${LOONAR_LDAP_USE_SSL_REAL:-false}")"
-      LDAP_BIND_DN="$LOONAR_LDAP_BIND_DN_REAL"
-      LDAP_BIND_PASSWORD="$LOONAR_LDAP_BIND_PASSWORD_REAL"
-      LDAP_GROUP_BASE="$LOONAR_LDAP_GROUP_BASE_REAL"
-      ;;
-    mock)
-      local server_source="$LOONAR_LDAP_SERVER_MOCK"
-      if [[ -n "${LOONAR_LDAP_SERVER_MOCK_INTERNAL:-}" ]]; then
-        server_source="$LOONAR_LDAP_SERVER_MOCK_INTERNAL"
+  for name in "${candidates[@]}"; do
+    if docker inspect -f '{{.State.Running}}' "$name" >/dev/null 2>&1; then
+      if docker exec "$name" /bin/true >/dev/null 2>&1; then
+        RESOLVED_SUPERSET_CONTAINER="$name"
+        return 0
       fi
-      LDAP_URI="$(normalize_ldap_uri "$server_source" "${LOONAR_LDAP_USE_SSL_MOCK:-false}")"
-      LDAP_BIND_DN="$LOONAR_LDAP_BIND_DN_MOCK"
-      LDAP_BIND_PASSWORD="$LOONAR_LDAP_BIND_PASSWORD_MOCK"
-      LDAP_GROUP_BASE="$LOONAR_LDAP_GROUP_BASE_MOCK"
-      ;;
-    *)
-      exit_with_help "Modo LDAP inválido: ${LOONAR_LDAP_MODE}."
-      ;;
-  esac
+    fi
+  done
 
-  log INFO "Modo LDAP: ${LOONAR_LDAP_MODE} | URI: ${LDAP_URI} | Base: ${LDAP_GROUP_BASE}"
-}
-
-cleanup_old_logs() {
-  local retain="$RETAIN_LOGS_MAX_DAYS"
-  local threshold=$((retain - 1))
-  local removed=0
-  while IFS= read -r -d '' file; do
-    rm -f "$file"
-    ((removed++))
-    log INFO "Log removido por retenção: $(basename "$file")"
-  done < <(find "$LOG_PATH" -maxdepth 1 -type f -name 'sync-asf-ad_*.log' -mtime +"$threshold" -print0)
-  log INFO "Limpeza de logs concluída (arquivos removidos: $removed)."
-}
-
-debug_block() {
-  local prefix="$1"
-  local content="$2"
-  [[ "$DEBUG" == "true" ]] || return 0
-  while IFS= read -r line; do
-    log INFO "[DEBUG] $prefix$line"
-  done <<<"$content"
-}
-
-configure_log_path() {
-  local target="$LOG_PATH"
-  if [[ -z "$target" ]]; then
-    target="$SCRIPT_DIR"
+  RESOLVED_SUPERSET_CONTAINER=$(docker ps --format '{{.Names}}' | grep -E '(^|_)superset_app$|superset-superset_app$' | head -n 1 || true)
+  if [[ -n "$RESOLVED_SUPERSET_CONTAINER" ]]; then
+    if docker exec "$RESOLVED_SUPERSET_CONTAINER" /bin/true >/dev/null 2>&1; then
+      return 0
+    fi
   fi
-  if [[ ! -d "$target" ]]; then
-    printf 'ERROR: Diretório de logs "%s" não existe.\n' "$target" >&2
+
+  local available
+  available=$(docker ps --format '{{.Names}}' | tr '\n' ' ')
+  exit_with_error "Não foi possível localizar um container do Superset (ex: 'superset_app' ou 'superset-superset_app'). Disponíveis: ${available:-nenhum}"
+}
+
+validate_env() {
+  local missing=()
+  [[ -z "$AD_URI" ]] && missing+=("AD_URI")
+  [[ -z "$AD_DN_BASE" ]] && missing+=("AD_DN_BASE")
+  [[ -z "$AD_SVC_USER" ]] && missing+=("AD_SVC_USER")
+  [[ -z "$AD_SVC_PASSWORD" ]] && missing+=("AD_SVC_PASSWORD")
+  [[ -z "$AD_GROUP_FILTERTERM" ]] && missing+=("AD_GROUP_FILTERTERM")
+  [[ -z "$ASF_ROLE_BASE" ]] && missing+=("ASF_ROLE_BASE")
+  if (( ${#missing[@]} > 0 )); then
+    exit_with_error "Variáveis obrigatórias ausentes: ${missing[*]}"
+  fi
+}
+
+ldap_search_or_die() {
+  local output
+  if ! output=$(LDAPTLS_REQCERT=allow ldapsearch -LLL -x -H "$AD_URI" -D "$AD_SVC_USER" -w "$AD_SVC_PASSWORD" -b "$AD_DN_BASE" "$@" 2>&1); then
+    printf '%s\n' "$output" >&2
     exit 1
   fi
-  LOG_PATH="$(cd "$target" && pwd)"
-  LOG_FILE="$LOG_PATH/sync-asf-ad_$(date +%d%m%Y%H%M%S).log"
-  if ! touch "$LOG_FILE"; then
-    printf 'ERROR: Não foi possível criar o arquivo de log em "%s".\n' "$LOG_FILE" >&2
-    exit 1
-  fi
-
-  # Dica explícita (vai para o stderr e aparece mesmo sem --show_log)
-  printf 'INFO: Logs serão gravados em "%s" (use --show_log para ver no terminal).\n' "$LOG_FILE" >&2
+  printf '%s' "$output"
 }
 
 ensure_base_role_exists() {
-  local output=""
-  if ! output=$(docker exec -i superset_app python3 - "$LOONAR_SUPERSET_BASE_ROLE" <<'PY'
+  local output
+  if ! output=$(docker exec -i "$RESOLVED_SUPERSET_CONTAINER" python3 - "$ASF_ROLE_BASE" <<'PY'
 from __future__ import annotations
 
 import sys
@@ -349,8 +138,7 @@ def main(role_name: str) -> None:
     with app.app_context():
         role = security_manager.find_role(role_name)
         if role is None:
-            print("BASE_ROLE_NOT_FOUND", file=sys.stderr)
-            raise SystemExit(1)
+            raise SystemExit(f"Role base não encontrada: {role_name}")
         print("BASE_ROLE_OK")
 
 
@@ -359,148 +147,221 @@ if __name__ == "__main__":
         raise SystemExit("Uso: check_base_role.py <role>")
     main(sys.argv[1])
 PY
-); then
-    log ERROR "Role base '${LOONAR_SUPERSET_BASE_ROLE}' não encontrada. Detalhes: ${output:-sem saída}."
+  ); then
+    printf '%s\n' "$output" >&2
     exit 1
   fi
-  debug_block "verificação role base >> " "$output"
-  log INFO "Role base '${LOONAR_SUPERSET_BASE_ROLE}' confirmada no Superset."
 }
 
 fetch_ad_groups() {
-  local LDAP_URI LDAP_BIND_DN LDAP_BIND_PASSWORD LDAP_GROUP_BASE
-  resolve_ldap_context
-
-  local filter="(objectClass=group)"
-  if [[ -n "${LOONAR_LDAP_CN_TERM:-}" ]]; then
-    filter="(&(objectClass=group)(cn=*${LOONAR_LDAP_CN_TERM}*))"
-  fi
-  local raw_output=""
-  if ! raw_output=$(LDAPTLS_REQCERT=allow ldapsearch -LLL -x -H "$LDAP_URI" -D "$LDAP_BIND_DN" -w "$LDAP_BIND_PASSWORD" -b "$LDAP_GROUP_BASE" "$filter" cn); then
-    log ERROR "Falha ao consultar grupos no LDAP (${LOONAR_LDAP_MODE})."
-    exit 1
-  fi
-  debug_block "ldapsearch >> " "$raw_output"
+  local filter="(&(objectClass=group)(cn=*${AD_GROUP_FILTERTERM}*))"
+  local raw_output
+  raw_output=$(ldap_search_or_die "$filter" cn)
   mapfile -t AD_GROUPS < <(printf '%s\n' "$raw_output" | awk -F': ' '/^cn: / {print $2}' | sort -u)
-  local filtro_desc="todos"
-  if [[ -n "${LOONAR_LDAP_CN_TERM:-}" ]]; then
-    filtro_desc="cn contendo '${LOONAR_LDAP_CN_TERM}'"
+  
+  printf 'Grupos encontrados no AD: %d\n' "${#AD_GROUPS[@]}" >&2
+  if (( ${#AD_GROUPS[@]} > 0 )); then
+    printf 'Grupos: %s\n' "${AD_GROUPS[*]}" >&2
   fi
-  log INFO "Total de grupos encontrados (${filtro_desc}): ${#AD_GROUPS[@]}."
 }
 
-sync_role_permissions() {
-  local role_name="$1"
-  local output=""
-  if ! output=$(docker exec -i superset_app python3 - "$LOONAR_SUPERSET_BASE_ROLE" "$role_name" <<'PY'
+sync_roles_in_superset() {
+  local groups_json
+  groups_json=$(printf '%s\n' "${AD_GROUPS[@]}" | python3 -c 'import json, sys; print(json.dumps([line.strip() for line in sys.stdin if line.strip()]))')
+
+  printf 'Sincronizando %d roles no Superset (JSON: %s)...\n' "${#AD_GROUPS[@]}" "$groups_json" >&2
+  
+  local output
+  if ! output=$(docker exec -i -e GROUPS_JSON="$groups_json" "$RESOLVED_SUPERSET_CONTAINER" python3 - "$ASF_ROLE_BASE" <<'PY'
 from __future__ import annotations
 
+import json
+import os
 import sys
-from typing import Optional, Tuple
-
 from superset.app import create_app
 from superset.extensions import db, security_manager
 
 
-def sync_role(base_role_name: str, target_role_name: str) -> Tuple[str, str]:
+def sync_roles(base_role_name: str, groups: list[str]) -> None:
     app = create_app()
     with app.app_context():
         base_role = security_manager.find_role(base_role_name)
         if base_role is None:
-            raise ValueError(f"Role base '{base_role_name}' não encontrada.")
-        target_role = security_manager.find_role(target_role_name)
-        created = False
-        if target_role is None:
-            target_role = security_manager.add_role(target_role_name)
-            created = True
-        target_role.permissions = list(base_role.permissions)
-        db.session.add(target_role)
+            raise SystemExit(f"Role base não encontrada: {base_role_name}")
+
+        print(f"DEBUG: Sincronizando {len(groups)} grupos: {groups}", file=sys.stderr)
+        
+        created_count = 0
+        for group in groups:
+            role = security_manager.find_role(group)
+            if role is None:
+                print(f"DEBUG: Criando role '{group}'", file=sys.stderr)
+                role = security_manager.add_role(group)
+                role.permissions = list(base_role.permissions)
+                db.session.add(role)
+                created_count += 1
+            else:
+                print(f"DEBUG: Role '{group}' já existe - mantendo inalterada", file=sys.stderr)
         db.session.commit()
-        return target_role.name, "created" if created else "updated"
+        print(f"Roles criadas: {created_count}", file=sys.stderr)
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        raise SystemExit("Uso: clone_role.py <role_base> <role_destino>")
-    try:
-        name, status = sync_role(sys.argv[1], sys.argv[2])
-    except ValueError as exc:
-        db.session.rollback()
-        print(str(exc), file=sys.stderr)
-        raise SystemExit(1) from exc
-    print(f"ROLE_SYNC_OK:{name}:{status}")
+    if len(sys.argv) != 2:
+        raise SystemExit("Uso: sync_roles.py <role_base>")
+    
+    groups_raw = os.environ.get("GROUPS_JSON", "[]")
+    print(f"DEBUG: GROUPS_JSON recebido: {groups_raw}", file=sys.stderr)
+    
+    payload = json.loads(groups_raw)
+    if not isinstance(payload, list):
+        raise SystemExit("Entrada inválida: esperado JSON list")
+    
+    sync_roles(sys.argv[1], payload)
+    print(f"ROLES_SYNC_OK:{len(payload)}")
 PY
-); then
-    log ERROR "Erro ao sincronizar role '${role_name}'. Detalhes: ${output:-sem saída}."
-    FAILED_ROLES+=("$role_name")
-    return 1
-  fi
-  debug_block "docker exec >> " "$output"
-  if [[ "$output" =~ ^ROLE_SYNC_OK:([^:]+):([^:]+)$ ]]; then
-    local name="${BASH_REMATCH[1]}"
-    local status="${BASH_REMATCH[2]}"
-    if [[ "$status" == "created" ]]; then
-      CREATED_ROLES+=("$name")
-      log INFO "Role '${name}' criada e sincronizada."
-    else
-      UPDATED_ROLES+=("$name")
-      log INFO "Role '${name}' atualizada."
-    fi
-  else
-    log INFO "Role '${role_name}' processada. Saída: $output"
-    UPDATED_ROLES+=("$role_name")
-  fi
-  return 0
-}
-
-process_groups() {
-  local group
-  for group in "${AD_GROUPS[@]}"; do
-    [[ -z "$group" ]] && continue
-    log INFO "Processando grupo '${group}'."
-    sync_role_permissions "$group" || continue
-  done
-}
-
-summarize() {
-  log INFO "Roles processadas: ${#AD_GROUPS[@]}"
-  if (( ${#CREATED_ROLES[@]} > 0 )); then
-    log INFO "Roles criadas: ${CREATED_ROLES[*]}"
-  fi
-  if (( ${#UPDATED_ROLES[@]} > 0 )); then
-    log INFO "Roles atualizadas (já existiam): ${UPDATED_ROLES[*]}"
-  fi
-  if (( ${#FAILED_ROLES[@]} > 0 )); then
-    log ERROR "Falha ao sincronizar as roles: ${FAILED_ROLES[*]}"
+  ); then
+    printf '%s\n' "$output" >&2
     exit 1
   fi
-  log INFO "Processo concluído com sucesso."
+  
+  printf '%s\n' "$output" >&2
+}
+
+fetch_ad_users_json() {
+  local raw_output
+  raw_output=$(ldap_search_or_die "(&(objectClass=user)(sAMAccountName=*))" sAMAccountName givenName sn mail userPrincipalName memberOf)
+
+  printf '%s\n' "$raw_output" | python3 -c $'import json\nimport re\nimport sys\n\nfilter_term = sys.argv[1]\nraw_lines = sys.stdin.read().splitlines()\n\nlines = []\nfor line in raw_lines:\n    if line.startswith(" ") and lines:\n        lines[-1] += line[1:]\n    else:\n        lines.append(line)\n\nusers = []\nentry: dict[str, object] = {}\n\nfor line in lines + [""]:\n    if line == "":\n        if entry.get("sAMAccountName"):\n            users.append(entry)\n        entry = {}\n        continue\n    if ":" not in line:\n        continue\n    key, val = line.split(":", 1)\n    val = val.lstrip()\n    if key == "memberOf":\n        entry.setdefault("memberOf", []).append(val)\n    else:\n        entry[key] = val\n\n\ndef dn_to_cn(dn: str) -> str | None:\n    match = re.match(r"CN=([^,]+)", dn, re.IGNORECASE)\n    return match.group(1) if match else None\n\n\nresult = []\nfor user in users:\n    username = user.get("sAMAccountName")\n    if not isinstance(username, str) or not username:\n        continue\n    groups = [\n        cn\n        for dn in user.get("memberOf", [])\n        if isinstance(dn, str) and (cn := dn_to_cn(dn))\n    ]\n    if filter_term:\n        groups = [group for group in groups if filter_term in group]\n    if not groups:\n        continue\n\n    first_name = user.get("givenName") or username\n    last_name = user.get("sn") or username\n    email = user.get("mail") or user.get("userPrincipalName") or f"{username}@invalid.local"\n\n    result.append(\n        {\n            "username": username,\n            "first_name": first_name,\n            "last_name": last_name,\n            "email": email,\n            "roles": sorted(set(groups)),\n        }\n    )\n\nprint(json.dumps(result))' "$AD_GROUP_FILTERTERM"
+}
+
+sync_users_in_superset() {
+  local users_json="$1"
+  local output
+  if ! output=$(docker exec -i -e USERS_JSON="$users_json" -e AD_EMAIL_INVALID="$AD_EMAIL_INVALID" "$RESOLVED_SUPERSET_CONTAINER" python3 - "$ASF_ROLE_BASE" <<'PY'
+from __future__ import annotations
+
+import json
+import os
+import secrets
+import sys
+from superset.app import create_app
+from superset.extensions import db, security_manager
+
+
+def ensure_role(base_role_name: str, role_name: str):
+    base_role = security_manager.find_role(base_role_name)
+    if base_role is None:
+        raise SystemExit(f"Role base não encontrada: {base_role_name}")
+    role = security_manager.find_role(role_name)
+    if role is None:
+        role = security_manager.add_role(role_name)
+    role.permissions = list(base_role.permissions)
+    db.session.add(role)
+    return role
+
+
+def sync_user(payload: dict[str, object], base_role_name: str) -> tuple[bool, str]:
+    username = str(payload.get("username"))
+    first_name = str(payload.get("first_name"))
+    last_name = str(payload.get("last_name"))
+    email = str(payload.get("email"))
+    
+    # Validar email: se inválido, usar padrão
+    if not email or email.startswith("http://") or email.startswith("https://") or "@" not in email:
+        email_template = os.environ.get("AD_EMAIL_INVALID", "<usuario>@sondadc.local")
+        email = email_template.replace("<usuario>", username)
+        print(f"Email inválido para usuário '{username}' - usando padrão: {email}", file=sys.stderr)
+    
+    roles = [ensure_role(base_role_name, role) for role in payload.get("roles", [])]
+    if not roles:
+        return False, username
+
+    user = security_manager.find_user(username=username)
+    if user is None:
+        try:
+            password = secrets.token_urlsafe(24)
+            user = security_manager.add_user(
+                username,
+                first_name,
+                last_name,
+                email,
+                roles[0],
+                password=password,
+            )
+            # add_user pode retornar False em caso de erro
+            if not user:
+                print(f"Falha ao criar usuário '{username}' - add_user retornou False", file=sys.stderr)
+                return False, username
+            
+            user.roles = roles
+            db.session.add(user)
+            return True, username
+        except Exception as e:
+            print(f"Erro ao criar usuário '{username}': {e}", file=sys.stderr)
+            db.session.rollback()
+            return False, username
+    else:
+        return False, username
+
+
+def main(base_role_name: str) -> None:
+    payload = json.loads(os.environ.get("USERS_JSON", "[]"))
+    if not isinstance(payload, list):
+        raise SystemExit("Entrada inválida: esperado JSON list")
+
+    app = create_app()
+    with app.app_context():
+        created_count = 0
+        for user_payload in payload:
+            if isinstance(user_payload, dict):
+                was_created, username = sync_user(user_payload, base_role_name)
+                if was_created:
+                    print(f"Usuário criado: {username}", file=sys.stderr)
+                    created_count += 1
+                else:
+                    print(f"Usuário já existe - mantendo inalterado: {username}", file=sys.stderr)
+        db.session.commit()
+        print(f"Usuários criados: {created_count}", file=sys.stderr)
+
+
+if __name__ == "__main__":
+    if len(sys.argv) != 2:
+        raise SystemExit("Uso: sync_users.py <role_base>")
+    main(sys.argv[1])
+    print("USERS_SYNC_OK")
+PY
+  ); then
+    printf '%s\n' "$output" >&2
+    exit 1
+  fi
 }
 
 main() {
-  load_env_file
-  validate_env_vars
-  parse_args "$@"
-  configure_log_path
-  trap 'log ERROR "Execução interrompida."; exit 1' INT TERM
-  validate_params
-  cleanup_old_logs
+  validate_env
   ensure_command ldapsearch
   ensure_command docker
   ensure_container_running
-
-  log INFO "Iniciando sincronização (container=superset_app, modo='${LOONAR_LDAP_MODE}', role base='${LOONAR_SUPERSET_BASE_ROLE}', filtro='${LOONAR_LDAP_CN_TERM:-todos}')."
 
   ensure_base_role_exists
   fetch_ad_groups
 
   if (( ${#AD_GROUPS[@]} == 0 )); then
-    log INFO "Nenhum grupo encontrado. Nada a realizar."
-    exit 0
+    exit_with_error "Nenhum grupo encontrado com o termo '${AD_GROUP_FILTERTERM}'."
   fi
 
-  process_groups
-  summarize
+  sync_roles_in_superset
+
+  local users_json
+  users_json=$(fetch_ad_users_json)
+
+  if [[ -z "$users_json" || "$users_json" == "[]" ]]; then
+    exit_with_error "Nenhum usuário encontrado com grupos contendo '${AD_GROUP_FILTERTERM}'."
+  fi
+
+  sync_users_in_superset "$users_json"
+  
+  printf '\n✓ Sincronização concluída com sucesso!\n' >&2
 }
 
 main "$@"
