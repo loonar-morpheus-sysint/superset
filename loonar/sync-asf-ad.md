@@ -96,16 +96,16 @@ cd loonar/
 
 ## Agendamento via cron
 
-O script carrega o `.env` automaticamente, então basta apontar para o executável:
+O script carrega o `.env` automaticamente, então basta apontar para o executável. Exemplo (execução diária às 02h00, sobrescrevendo o log do dia da semana):
 
 ```cron
 # Min Hora Dia Mês DiaSemana Comando
-0 2 * * * /home/app/superset/loonar/sync-asf-ad.sh >> /var/log/superset-sync/cron.log 2>&1
+0 2 * * * /root/superset/loonar/sync-asf-ad.sh > /var/log/sync-asf-ad-$(date +\%a).log 2>&1
 ```
 
-- O comando acima executa o script diariamente às 02h00.
-- Certifique-se de que o arquivo `.env` (ou `.env-prod`) exista no diretório `loonar/`.
-- O redirecionamento `>>` acumula a saída para análise posterior; ajuste caminhos conforme necessário.
+- O `$(date +%a)` gera `Mon`, `Tue`, etc., formando o arquivo `sync-asf-ad-Mon.log`.
+- O redirecionamento `>` substitui o arquivo se já existir.
+- Certifique-se de que o arquivo `.env` exista no diretório `loonar/`.
 - Após salvar o crontab, confirme com `crontab -l` e monitore os logs para garantir que o container `superset_app` esteja disponível no horário programado.
 
 ## Mensagens e retorno
