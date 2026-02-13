@@ -5,7 +5,7 @@ clear
 set -euo pipefail
 
 # ─── Configurações ────────────────────────────────────────────────
-SUPERSET_URL=""
+SUPERSET_URL="http://localhost:8088"     # URL base do Superset (sem barra no final). Se preenchido aqui, tem prioridade sobre .env
 SUPERSET_USER=""
 SUPERSET_PASS=""
 DASHBOARD_ID=""                          # Dashboard modelo (origem dos clones)
@@ -85,17 +85,22 @@ get_env_value() {
 	' "$ENV_FILE"
 }
 
-SUPERSET_URL="$(get_env_value "SUPERSET_HOST")"
+ENV_SUPERSET_URL="$(get_env_value "SUPERSET_HOST")"
 SUPERSET_USER="$(get_env_value "LOONAR_CLONE_SUPERSET_USER")"
 SUPERSET_PASS="$(get_env_value "LOONAR_CLONE_SUPERSET_PASS")"
 DASHBOARD_ID="$(get_env_value "LOONAR_CLONE_DASHBOARD_ID")"
 DASHBOARD_PREFIX="$(get_env_value "LOONAR_CLONE_DASHBOARD_PREFIX")"
 ROLE_SUFFIX="$(get_env_value "LOONAR_CLONE_ROLE_SUFFIX")"
 
+# SUPERSET_URL definido no script tem prioridade; usa .env apenas se estiver vazio.
+if [[ -z "$SUPERSET_URL" ]]; then
+	SUPERSET_URL="$ENV_SUPERSET_URL"
+fi
+
 if [[ -z "$SUPERSET_URL" || -z "$SUPERSET_USER" || -z "$SUPERSET_PASS" || -z "$DASHBOARD_ID" || -z "$DASHBOARD_PREFIX" || -z "$ROLE_SUFFIX" ]]; then
 	printf "\n" >&2
 	printf "${COLOR_RED}${COLOR_BOLD}❌ Variáveis obrigatórias ausentes no .env:${COLOR_RESET}\n" >&2
-	printf "  - SUPERSET_HOST\n" >&2
+	printf "  - SUPERSET_HOST (ou SUPERSET_URL definido no script)\n" >&2
 	printf "  - LOONAR_CLONE_SUPERSET_USER\n" >&2
 	printf "  - LOONAR_CLONE_SUPERSET_PASS\n" >&2
 	printf "  - LOONAR_CLONE_DASHBOARD_ID\n" >&2
@@ -107,6 +112,16 @@ fi
 if [[ ! "$SUPERSET_URL" =~ ^https?:// ]]; then
 	SUPERSET_URL="https://${SUPERSET_URL}"
 fi
+
+# Opções TLS/certificado: só se aplicam para HTTPS. Em HTTP, são ignoradas.
+CURL_TLS_OPTS=()
+if [[ "$SUPERSET_URL" =~ ^https:// ]]; then
+	CURL_TLS_OPTS=(--insecure)
+fi
+
+curl_run() {
+	curl "${CURL_TLS_OPTS[@]}" "$@"
+}
 
 # ──────────────────────────────────────────────────────────────────
 
@@ -264,7 +279,7 @@ COOKIE_JAR=$(mktemp)
 trap 'rm -f "$COOKIE_JAR" 2>/dev/null' EXIT
 
 # 1a) Obter CSRF token do formulário de login
-if ! FORM_CSRF="$(curl -s -c "$COOKIE_JAR" "${SUPERSET_URL}/login/" \
+if ! FORM_CSRF="$(curl_run -s -c "$COOKIE_JAR" "${SUPERSET_URL}/login/" \
 	| grep -oP 'value="\K[^"]{20,}')"; then
 	say_err "Falha ao acessar ${SUPERSET_URL}/login/ (verifique SUPERSET_HOST)."
 	exit 1
@@ -276,7 +291,7 @@ if [[ -z "$FORM_CSRF" ]]; then
 fi
 
 # 1b) Fazer login via formulário (cria sessão com cookies)
-if ! LOGIN_CODE="$(curl -s -c "$COOKIE_JAR" -b "$COOKIE_JAR" \
+if ! LOGIN_CODE="$(curl_run -s -c "$COOKIE_JAR" -b "$COOKIE_JAR" \
 	-w "%{http_code}" -o /dev/null \
 	-X POST "${SUPERSET_URL}/login/" \
 	-H "Content-Type: application/x-www-form-urlencoded" \
@@ -295,7 +310,7 @@ if [[ "$LOGIN_CODE" != "302" && ("$LOGIN_CODE" -lt 200 || "$LOGIN_CODE" -ge 400)
 fi
 
 # 1c) Obter CSRF token da API (para requisições POST/PUT)
-if ! API_CSRF="$(curl -s -b "$COOKIE_JAR" -c "$COOKIE_JAR" \
+if ! API_CSRF="$(curl_run -s -b "$COOKIE_JAR" -c "$COOKIE_JAR" \
 	"${SUPERSET_URL}/api/v1/security/csrf_token/" \
 	| jq -r '.result // empty')"; then
 	say_err "Falha ao obter CSRF token da API."
@@ -308,7 +323,7 @@ if [[ -z "$API_CSRF" ]]; then
 fi
 
 # 1d) Obter access_token JWT (para endpoints GET que exigem Bearer)
-if ! LOGIN_RESP="$(curl -s -X POST "${SUPERSET_URL}/api/v1/security/login" \
+if ! LOGIN_RESP="$(curl_run -s -X POST "${SUPERSET_URL}/api/v1/security/login" \
 	-H "Content-Type: application/json" \
 	-d "{\"username\":\"${SUPERSET_USER}\",\"password\":\"${SUPERSET_PASS}\",\"provider\":\"ldap\",\"refresh\":true}")"; then
 	say_err "Falha ao autenticar na API (JWT)."
@@ -331,7 +346,7 @@ TEMPLATE_DIR=$(mktemp -d)
 TEMPLATE_ZIP="${TEMPLATE_DIR}/dashboard_template_${DASHBOARD_ID}.zip"
 trap 'rm -rf "$COOKIE_JAR" "$TEMPLATE_DIR" 2>/dev/null' EXIT
 
-TEMPLATE_HTTP_CODE="$(curl -s -o "$TEMPLATE_ZIP" -w "%{http_code}" \
+TEMPLATE_HTTP_CODE="$(curl_run -s -o "$TEMPLATE_ZIP" -w "%{http_code}" \
 	-X GET "${SUPERSET_URL}/api/v1/dashboard/export/?q=%5B${DASHBOARD_ID}%5D" \
 	-H "Authorization: Bearer ${TOKEN}")"
 
@@ -349,7 +364,7 @@ say_ok "Template exportado com sucesso."
 
 # ─── Função auxiliar: renovar CSRF token ─────────────────────────
 refresh_csrf() {
-	API_CSRF="$(curl -s -b "$COOKIE_JAR" -c "$COOKIE_JAR" \
+	API_CSRF="$(curl_run -s -b "$COOKIE_JAR" -c "$COOKIE_JAR" \
 		"${SUPERSET_URL}/api/v1/security/csrf_token/" \
 		| jq -r '.result // empty')"
 }
@@ -503,7 +518,7 @@ clone_dashboard_for() {
 	refresh_csrf
 
 	local import_resp
-	import_resp="$(curl -s -w "\n%{http_code}" \
+	import_resp="$(curl_run -s -w "\n%{http_code}" \
 		-b "$COOKIE_JAR" \
 		-X POST "${SUPERSET_URL}/api/v1/dashboard/import/" \
 		-H "X-CSRFToken: ${API_CSRF}" \
@@ -529,7 +544,7 @@ clone_dashboard_for() {
 	say_action "[${dash_name}] Localizando clone..."
 
 	local dash_list
-	dash_list="$(curl -s -b "$COOKIE_JAR" \
+	dash_list="$(curl_run -s -b "$COOKIE_JAR" \
 		"${SUPERSET_URL}/api/v1/dashboard/?q=(order_column:changed_on_delta_humanized,order_direction:desc,page_size:5)" \
 		-H "Authorization: Bearer ${TOKEN}")"
 
@@ -554,7 +569,7 @@ clone_dashboard_for() {
 	refresh_csrf
 
 	local rename_resp
-	rename_resp="$(curl -s -o /dev/null -w "%{http_code}" \
+	rename_resp="$(curl_run -s -o /dev/null -w "%{http_code}" \
 		-b "$COOKIE_JAR" \
 		-X PUT "${SUPERSET_URL}/api/v1/dashboard/${new_id}" \
 		-H "X-CSRFToken: ${API_CSRF}" \
@@ -574,7 +589,7 @@ clone_dashboard_for() {
 	refresh_csrf
 
 	local role_resp
-	role_resp="$(curl -s -o /dev/null -w "%{http_code}" \
+	role_resp="$(curl_run -s -o /dev/null -w "%{http_code}" \
 		-b "$COOKIE_JAR" \
 		-X PUT "${SUPERSET_URL}/api/v1/dashboard/${new_id}" \
 		-H "X-CSRFToken: ${API_CSRF}" \
@@ -599,7 +614,7 @@ ROLES_PAGE=0
 ROLES_PAGE_SIZE=100
 
 while true; do
-	PAGE_RESP="$(curl -s -b "$COOKIE_JAR" \
+	PAGE_RESP="$(curl_run -s -b "$COOKIE_JAR" \
 		"${SUPERSET_URL}/api/v1/security/roles/?q=(page:${ROLES_PAGE},page_size:${ROLES_PAGE_SIZE})" \
 		-H "Authorization: Bearer ${TOKEN}")"
 
@@ -639,7 +654,7 @@ DASH_PAGE=0
 DASH_PAGE_SIZE=100
 
 while true; do
-	PAGE_RESP="$(curl -s -b "$COOKIE_JAR" \
+	PAGE_RESP="$(curl_run -s -b "$COOKIE_JAR" \
 		"${SUPERSET_URL}/api/v1/dashboard/?q=(page:${DASH_PAGE},page_size:${DASH_PAGE_SIZE})" \
 		-H "Authorization: Bearer ${TOKEN}")"
 

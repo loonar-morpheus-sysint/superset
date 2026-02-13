@@ -35,12 +35,26 @@ O script `clone-dashboard.sh` automatiza a clonagem de um dashboard “modelo”
 
 O script espera um arquivo `.env` no **mesmo diretório** (`loonar/`) com as seguintes chaves:
 
-- `SUPERSET_HOST` — host do Superset (com ou sem `https://`).
+- `SUPERSET_HOST` — host do Superset (com ou sem `https://`) **quando `SUPERSET_URL` no script estiver vazio**.
 - `LOONAR_CLONE_SUPERSET_USER` — usuário para login.
 - `LOONAR_CLONE_SUPERSET_PASS` — senha do usuário.
 - `LOONAR_CLONE_DASHBOARD_ID` — ID do dashboard modelo (origem).
 - `LOONAR_CLONE_DASHBOARD_PREFIX` — prefixo do nome dos dashboards clonados.
 - `LOONAR_CLONE_ROLE_SUFFIX` — sufixo usado para filtrar as roles.
+
+## Prioridade da URL do Superset
+
+O valor de `SUPERSET_URL` definido no próprio `clone-dashboard.sh` tem prioridade sobre `SUPERSET_HOST` do `.env`.
+
+- Se `SUPERSET_URL` estiver preenchido no script, ele será usado.
+- Se `SUPERSET_URL` estiver vazio no script, o valor vem de `SUPERSET_HOST` no `.env`.
+
+Isso permite fixar um endpoint no script quando necessário (por exemplo, ambiente local) sem depender da variável no `.env`.
+
+## Comportamento de certificado (HTTP/HTTPS)
+
+- Para URL com `http://`: opções de certificado TLS são **ignoradas**.
+- Para URL com `https://`: o script usa `--insecure` nas chamadas HTTP (ignora validação de certificado).
 
 > **Exemplo de `.env`:**
 >
