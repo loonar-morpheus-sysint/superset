@@ -11,6 +11,41 @@ SUPERSET_PASS=""
 DASHBOARD_ID=""                          # Dashboard modelo (origem dos clones)
 DASHBOARD_PREFIX=""                      # Prefixo do nome do dashboard clonado
 ROLE_SUFFIX=""                           # Sufixo das roles a serem pesquisadas
+NO_INTERACTIVE=false
+AUTO_YES=false
+
+print_usage() {
+	cat <<'EOF'
+Uso: ./clone-dashboard.sh [--no-interactive]
+
+Opções:
+  --no-interactive   Executa sem prompts de confirmação.
+  -h, --help         Exibe esta ajuda.
+EOF
+}
+
+parse_args() {
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+			--no-interactive)
+				NO_INTERACTIVE=true
+				AUTO_YES=true
+				;;
+			-h|--help)
+				print_usage
+				exit 0
+				;;
+			*)
+				printf "\n❌ Parâmetro inválido: %s\n\n" "$1" >&2
+				print_usage >&2
+				exit 1
+				;;
+		esac
+		shift
+	done
+}
+
+parse_args "$@"
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="${SCRIPT_DIR}/.env"
@@ -92,6 +127,9 @@ say_action() { printf "%b\n\n" "${COLOR_MAGENTA}${COLOR_BOLD}🚀 $*${COLOR_RESE
 
 confirm_continue() {
 	local message="$1"
+	if [[ "$NO_INTERACTIVE" == "true" ]]; then
+		return 0
+	fi
 	local prompt
 	prompt=$(printf "%b" "${COLOR_BLUE}${COLOR_BOLD}❓ ${message} (s/N): ${COLOR_RESET}")
 	read -r -p "$prompt" reply
@@ -104,6 +142,9 @@ confirm_continue() {
 
 confirm_continue_or_all() {
 	local message="$1"
+	if [[ "$NO_INTERACTIVE" == "true" ]]; then
+		return 0
+	fi
 	local prompt
 	prompt=$(printf "%b" "${COLOR_BLUE}${COLOR_BOLD}❓ ${message} (s/N/T): ${COLOR_RESET}")
 	read -r -p "$prompt" reply
