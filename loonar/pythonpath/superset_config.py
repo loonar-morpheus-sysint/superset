@@ -27,7 +27,7 @@ from flask_appbuilder.security.manager import AUTH_DB, AUTH_LDAP
 from flask_appbuilder.security.sqla.manager import SecurityManager
 
 from loonar import LoonarAppInitializer
-from loonar.ldap_config import get_ldap_setting
+from loonar.ldap_config import get_ldap_setting, get_ldap_user_base_aliases
 from loonar.security import LoonarSecurityManager
 from superset.security import SupersetSecurityManager
 
@@ -106,13 +106,29 @@ AUTH_TYPE = AUTH_LDAP if _LOGIN_FORM_TYPE == "ldap" else AUTH_DB
 AUTH_USER_REGISTRATION = False
 AUTH_USER_REGISTRATION_ROLE = "Gamma"
 
-AUTH_LDAP_SERVER = get_ldap_setting("LOONAR_LDAP_SERVER")
+_ldap_mode = os.getenv("LOONAR_LDAP_MODE", "real").strip().lower()
+AUTH_LDAP_SERVER = (
+    get_ldap_setting("LOONAR_LDAP_SERVER_MOCK")
+    if _ldap_mode == "mock"
+    else get_ldap_setting("LOONAR_LDAP_SERVER_REAL")
+)
 AUTH_LDAP_USE_TLS = (
-    get_ldap_setting("LOONAR_LDAP_USE_SSL", "false") or "false"
+    get_ldap_setting("LOONAR_LDAP_USE_SSL_MOCK", "false")
+    if _ldap_mode == "mock"
+    else get_ldap_setting("LOONAR_LDAP_USE_SSL_REAL", "false")
 ).lower() == "true"
-AUTH_LDAP_BIND_USER = get_ldap_setting("LOONAR_LDAP_BIND_DN")
-AUTH_LDAP_BIND_PASSWORD = get_ldap_setting("LOONAR_LDAP_BIND_PASSWORD")
-AUTH_LDAP_SEARCH = get_ldap_setting("LOONAR_LDAP_USER_BASE")
+AUTH_LDAP_BIND_USER = (
+    get_ldap_setting("LOONAR_LDAP_BIND_DN_MOCK")
+    if _ldap_mode == "mock"
+    else get_ldap_setting("LOONAR_LDAP_BIND_DN_REAL")
+)
+AUTH_LDAP_BIND_PASSWORD = (
+    get_ldap_setting("LOONAR_LDAP_BIND_PASSWORD_MOCK")
+    if _ldap_mode == "mock"
+    else get_ldap_setting("LOONAR_LDAP_BIND_PASSWORD_REAL")
+)
+_ldap_user_base_aliases = get_ldap_user_base_aliases("")
+AUTH_LDAP_SEARCH = next(iter(_ldap_user_base_aliases.values()), "")
 AUTH_LDAP_UID_FIELD = os.getenv("LOONAR_LDAP_UID_ATTR", "sAMAccountName")
 AUTH_LDAP_FIRSTNAME_FIELD = os.getenv("LOONAR_LDAP_FIRSTNAME_ATTR", "givenName")
 AUTH_LDAP_LASTNAME_FIELD = os.getenv("LOONAR_LDAP_LASTNAME_ATTR", "sn")

@@ -15,11 +15,13 @@
 from __future__ import annotations
 
 import logging
+from threading import Lock
 from typing import List, Optional
 
 from flask import current_app, flash, redirect, request, Response
 from flask_appbuilder import AppBuilder, expose
 from flask_appbuilder.security.forms import LoginForm_db
+from flask_appbuilder.security.manager import AUTH_LDAP
 from flask_appbuilder.security.sqla.models import User
 from flask_appbuilder.security.views import AuthDBView
 from flask_babel import gettext as _
@@ -28,17 +30,18 @@ from ldap3 import ALL, Connection, Server, SUBTREE
 from ldap3.core.exceptions import LDAPException
 from ldap3.utils.conv import escape_filter_chars
 from sqlalchemy.orm import Session
-from wtforms import HiddenField
+from wtforms import HiddenField, SelectField
 
 from superset.security import SupersetSecurityManager
 
-from .ldap_config import get_ldap_setting
+from .ldap_config import get_ldap_setting, get_ldap_user_base_aliases
 
 logger = logging.getLogger(__name__)
 
 
 class LoonarLoginForm(LoginForm_db):
     auth_provider = HiddenField(default="database")
+    ldap_user_base_alias = SelectField(_("Contexto LDAP"), choices=[])
 
 
 class LoonarAuthDBView(AuthDBView):
@@ -48,6 +51,8 @@ class LoonarAuthDBView(AuthDBView):
     @expose("/login/", methods=["GET", "POST"])
     def login(self) -> Response:
         form = self.form()
+        self._populate_ldap_alias_choices(form)
+
         if request.method == "POST" and form.validate_on_submit():
             provider = (form.auth_provider.data or "database").lower()
             if provider == "ldap":
@@ -56,12 +61,24 @@ class LoonarAuthDBView(AuthDBView):
                 result = self._login_with_database(form)
             if result:
                 return result
+
         return self.render_template(
             self.template,
             title=self.title,
             form=form,
+            ldap_login_enabled=current_app.config.get("AUTH_TYPE") == AUTH_LDAP,
             appbuilder=self.appbuilder,
         )
+
+    def _populate_ldap_alias_choices(self, form: LoonarLoginForm) -> None:
+        sm = self.appbuilder.sm
+        choices: list[tuple[str, str]] = []
+        if hasattr(sm, "get_ldap_user_base_choices"):
+            choices = sm.get_ldap_user_base_choices()
+
+        form.ldap_user_base_alias.choices = choices
+        if choices and not form.ldap_user_base_alias.data:
+            form.ldap_user_base_alias.data = choices[0][0]
 
     def _login_with_database(self, form: LoonarLoginForm) -> Optional[Response]:
         try:
@@ -74,10 +91,10 @@ class LoonarAuthDBView(AuthDBView):
             remember = getattr(form, "remember_me", None)
             login_user(user, remember=bool(remember.data) if remember else False)
             return redirect(self.get_redirect())
-        except Exception as e:
+        except Exception as ex:
             logger.error(
                 "Erro durante autenticação do banco de dados para "
-                f"usuário {form.username.data}: {str(e)}",
+                f"usuário {form.username.data}: {str(ex)}",
                 exc_info=True,
             )
             flash(_("Erro ao processar login. Tente novamente."), "danger")
@@ -85,25 +102,32 @@ class LoonarAuthDBView(AuthDBView):
 
     def _login_with_ldap(self, form: LoonarLoginForm) -> Optional[Response]:
         try:
-            user = self.appbuilder.sm.auth_user_ldap(
-                form.username.data, form.password.data
-            )
+            selected_alias = (form.ldap_user_base_alias.data or "").strip()
+            sm = self.appbuilder.sm
+            if hasattr(sm, "auth_user_ldap_with_alias"):
+                user = sm.auth_user_ldap_with_alias(
+                    form.username.data,
+                    form.password.data,
+                    selected_alias,
+                )
+            else:
+                user = sm.auth_user_ldap(form.username.data, form.password.data)
             if not user:
                 flash(_("Credenciais inválidas no Active Directory."), "danger")
                 return None
             login_user(user, remember=False)
             return redirect(self.get_redirect())
-        except LDAPException as e:
+        except LDAPException as ex:
             logger.error(
-                f"Erro de conexão LDAP para usuário {form.username.data}: {str(e)}",
+                f"Erro de conexão LDAP para usuário {form.username.data}: {str(ex)}",
                 exc_info=True,
             )
             flash(_("Erro ao conectar ao Active Directory. Tente novamente."), "danger")
             return None
-        except Exception as e:
+        except Exception as ex:
             logger.error(
                 "Erro durante autenticação LDAP para "
-                f"usuário {form.username.data}: {str(e)}",
+                f"usuário {form.username.data}: {str(ex)}",
                 exc_info=True,
             )
             flash(_("Erro ao processar login. Tente novamente."), "danger")
@@ -115,45 +139,107 @@ class LoonarSecurityManager(SupersetSecurityManager):
 
     def __init__(self, appbuilder: AppBuilder) -> None:
         super().__init__(appbuilder)
-        self.ldap_group_base = get_ldap_setting("LOONAR_LDAP_GROUP_BASE", "") or ""
-        default_user_base = self.ldap_group_base or None
-        self.ldap_user_base = get_ldap_setting(
-            "LOONAR_LDAP_USER_BASE", default_user_base
-        ) or (default_user_base or "")
+        self._ldap_auth_lock = Lock()
+
+        ldap_mode = (get_ldap_setting("LOONAR_LDAP_MODE") or "real").strip().lower()
+        self.ldap_group_base = (
+            get_ldap_setting("LOONAR_LDAP_GROUP_BASE_MOCK", "")
+            if ldap_mode == "mock"
+            else get_ldap_setting("LOONAR_LDAP_GROUP_BASE_REAL", "")
+        ) or ""
+
+        default_user_base = self.ldap_group_base or ""
+        self.ldap_user_base_aliases = get_ldap_user_base_aliases(default_user_base)
+        if not self.ldap_user_base_aliases and default_user_base:
+            self.ldap_user_base_aliases = {"Padrão": default_user_base}
+
+        self.ldap_user_base = next(iter(self.ldap_user_base_aliases.values()), "")
         self.ldap_uid_attr = (
             get_ldap_setting("LOONAR_LDAP_UID_ATTR", "sAMAccountName")
             or "sAMAccountName"
         )
 
+    def get_ldap_user_base_choices(self) -> list[tuple[str, str]]:
+        return [(alias, alias) for alias in self.ldap_user_base_aliases.keys()]
+
+    def _resolve_ldap_user_base_from_alias(self, selected_alias: Optional[str]) -> str:
+        alias = (selected_alias or "").strip()
+        if alias:
+            selected_dn = self.ldap_user_base_aliases.get(alias)
+            if selected_dn:
+                return selected_dn
+        return self.ldap_user_base
+
+    def auth_user_ldap_with_alias(
+        self,
+        username: str,
+        password: str,
+        selected_alias: Optional[str] = None,
+    ) -> Optional[User]:
+        selected_ldap_user_base = self._resolve_ldap_user_base_from_alias(selected_alias)
+        return self._auth_user_ldap_internal(
+            username,
+            password,
+            selected_ldap_user_base,
+        )
+
     def auth_user_ldap(self, username: str, password: str) -> Optional[User]:
+        return self._auth_user_ldap_internal(username, password, self.ldap_user_base)
+
+    def _auth_user_ldap_internal(
+        self,
+        username: str,
+        password: str,
+        selected_ldap_user_base: str,
+    ) -> Optional[User]:
+        original_auth_ldap_search = getattr(self, "auth_ldap_search", None)
         try:
-            # Verifica se o usuário já existe no banco ANTES da autenticação
-            existing_user = self.find_user(username=username)
-            is_new_user = existing_user is None
-            
-            user = super().auth_user_ldap(username, password)
+            with self._ldap_auth_lock:
+                self.auth_ldap_search = selected_ldap_user_base
+
+                # Verifica se o usuário já existe no banco ANTES da autenticação
+                existing_user = self.find_user(username=username)
+                is_new_user = existing_user is None
+
+                user = super().auth_user_ldap(username, password)
+
             if user and is_new_user:
                 # Sincroniza roles apenas para usuários novos (primeira vez fazendo login)
                 logger.info(
                     f"Novo usuário LDAP detectado: {username}. "
                     "Sincronizando roles dos grupos LDAP."
                 )
-                self._sync_roles_from_ldap_groups(user, username)
+                self._sync_roles_from_ldap_groups(
+                    user,
+                    username,
+                    selected_ldap_user_base,
+                )
             elif user and not is_new_user:
                 logger.debug(
                     f"Usuário LDAP existente: {username}. "
                     "Mantendo roles atuais (sincronização desabilitada)."
                 )
+
             return user
-        except Exception as e:
+        except Exception as ex:
             logger.error(
-                f"Erro ao sincronizar roles LDAP para usuário {username}: {str(e)}",
+                f"Erro ao sincronizar roles LDAP para usuário {username}: {str(ex)}",
                 exc_info=True,
             )
             # Retorna o usuário mesmo que a sincronização de roles falhe
-            return super().auth_user_ldap(username, password)
+            with self._ldap_auth_lock:
+                self.auth_ldap_search = selected_ldap_user_base
+                return super().auth_user_ldap(username, password)
+        finally:
+            with self._ldap_auth_lock:
+                self.auth_ldap_search = original_auth_ldap_search
 
-    def _sync_roles_from_ldap_groups(self, user: User, username: str) -> None:
+    def _sync_roles_from_ldap_groups(
+        self,
+        user: User,
+        username: str,
+        selected_ldap_user_base: Optional[str] = None,
+    ) -> None:
         if not self.ldap_group_base:
             return
 
@@ -166,7 +252,11 @@ class LoonarSecurityManager(SupersetSecurityManager):
             return
 
         try:
-            user_dn = self._lookup_user_dn(connection, username)
+            user_dn = self._lookup_user_dn(
+                connection,
+                username,
+                selected_ldap_user_base,
+            )
             if not user_dn:
                 logger.debug(f"DN do usuário {username} não encontrado no LDAP")
                 return
@@ -198,37 +288,41 @@ class LoonarSecurityManager(SupersetSecurityManager):
             user.roles = matching_roles
             session.commit()
             logger.info(f"Roles do usuário {username} sincronizadas: {new_names}")
-        except Exception as e:
+        except Exception as ex:
             logger.error(
-                f"Erro ao sincronizar roles LDAP para usuário {username}: {str(e)}",
+                f"Erro ao sincronizar roles LDAP para usuário {username}: {str(ex)}",
                 exc_info=True,
             )
             # Não lança exceção, apenas loga o erro
         finally:
             try:
                 connection.unbind()
-            except Exception as e:
-                logger.warning(f"Erro ao desconectar do LDAP: {str(e)}")
+            except Exception as ex:
+                logger.warning(f"Erro ao desconectar do LDAP: {str(ex)}")
 
     def register_views(self) -> None:
         """
         Corrige o registro das views para garantir que self.auth_view nunca seja None.
-        Registra as views padrão primeiro.
-        Depois substitui a view de autenticação se necessário.
+        Registra a view de autenticação customizada primeiro para que
+        a rota /login/ tenha precedência sobre as views padrão do Superset/FAB.
         """
         if not current_app.config.get("FAB_ADD_SECURITY_VIEWS", True):
             return
 
-        # Chama o registro padrão primeiro (garante que self.auth_view seja válido)
-        super().register_views()
-
-        # Substitui a view de autenticação pelo customizado, se necessário
+        custom_auth_view = None
         if self.authdbview is not None:
             custom_auth_view = self.authdbview()
-            self.auth_view = custom_auth_view
-            # Registra o endpoint explicitamente
+            # Endpoint único; a precedência da rota vem da ordem de registro.
             custom_auth_view.endpoint = "LoonarAuthDBView"
             self.appbuilder.add_view_no_menu(custom_auth_view)
+            self.auth_view = custom_auth_view
+
+        # Registra as demais views padrão do Superset/FAB.
+        super().register_views()
+
+        # Mantém referência explícita para o auth_view customizado.
+        if custom_auth_view is not None:
+            self.auth_view = custom_auth_view
 
             # Remove SupersetAuthView se existir
             for view in list(self.appbuilder.baseviews):
@@ -263,11 +357,26 @@ class LoonarSecurityManager(SupersetSecurityManager):
                     security_menu.childs.remove(item)
 
     def _get_bound_connection(self) -> Optional[Connection]:
-        server_uri = get_ldap_setting("LOONAR_LDAP_SERVER")
-        bind_dn = get_ldap_setting("LOONAR_LDAP_BIND_DN")
-        bind_password = get_ldap_setting("LOONAR_LDAP_BIND_PASSWORD")
+        ldap_mode = (get_ldap_setting("LOONAR_LDAP_MODE") or "real").strip().lower()
+        server_uri = (
+            get_ldap_setting("LOONAR_LDAP_SERVER_MOCK")
+            if ldap_mode == "mock"
+            else get_ldap_setting("LOONAR_LDAP_SERVER_REAL")
+        )
+        bind_dn = (
+            get_ldap_setting("LOONAR_LDAP_BIND_DN_MOCK")
+            if ldap_mode == "mock"
+            else get_ldap_setting("LOONAR_LDAP_BIND_DN_REAL")
+        )
+        bind_password = (
+            get_ldap_setting("LOONAR_LDAP_BIND_PASSWORD_MOCK")
+            if ldap_mode == "mock"
+            else get_ldap_setting("LOONAR_LDAP_BIND_PASSWORD_REAL")
+        )
         use_ssl = (
-            get_ldap_setting("LOONAR_LDAP_USE_SSL", "false") or "false"
+            get_ldap_setting("LOONAR_LDAP_USE_SSL_MOCK", "false")
+            if ldap_mode == "mock"
+            else get_ldap_setting("LOONAR_LDAP_USE_SSL_REAL", "false")
         ).lower() == "true"
         if not server_uri or not bind_dn or not bind_password:
             logger.warning(
@@ -286,25 +395,30 @@ class LoonarSecurityManager(SupersetSecurityManager):
                 auto_bind=True,
                 check_names=False,
             )
-        except LDAPException as e:
+        except LDAPException as ex:
             logger.error(
                 "Não foi possível conectar ao servidor LDAP %s: %s",
                 server_uri,
-                str(e),
+                str(ex),
                 exc_info=True,
             )
             return None
-        except Exception as e:
+        except Exception as ex:
             logger.error(
                 "Erro inesperado ao conectar ao servidor LDAP %s: %s",
                 server_uri,
-                str(e),
+                str(ex),
                 exc_info=True,
             )
             return None
 
-    def _lookup_user_dn(self, connection: Connection, username: str) -> Optional[str]:
-        base_dn = self.ldap_user_base or self.ldap_group_base
+    def _lookup_user_dn(
+        self,
+        connection: Connection,
+        username: str,
+        selected_ldap_user_base: Optional[str] = None,
+    ) -> Optional[str]:
+        base_dn = selected_ldap_user_base or self.ldap_user_base or self.ldap_group_base
         if not base_dn:
             return None
         safe_uid = escape_filter_chars(username)

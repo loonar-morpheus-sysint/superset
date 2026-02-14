@@ -14,8 +14,13 @@
 # limitations under the License.
 from __future__ import annotations
 
+import json
+import logging
 import os
 from typing import Optional
+
+
+logger = logging.getLogger(__name__)
 
 
 def get_ldap_mode(default: str = "real") -> str:
@@ -38,3 +43,46 @@ def get_ldap_setting(key: str, default: Optional[str] = None) -> Optional[str]:
         if value:
             return value
     return default
+
+
+def parse_ldap_user_base_aliases(raw_value: Optional[str]) -> dict[str, str]:
+    """Parse LDAP user base from env supporting legacy string and JSON map."""
+
+    value = (raw_value or "").strip()
+    if not value:
+        return {}
+
+    if value.startswith("{"):
+        try:
+            parsed = json.loads(value)
+            if not isinstance(parsed, dict):
+                logger.warning(
+                    "LOONAR_LDAP_USER_BASE_* deve ser um objeto JSON. "
+                    "Usando fallback para formato legado."
+                )
+                return {"Padrão": value}
+
+            aliases: dict[str, str] = {}
+            for alias, dn in parsed.items():
+                alias_text = str(alias).strip()
+                dn_text = str(dn).strip()
+                if alias_text and dn_text:
+                    aliases[alias_text] = dn_text
+            return aliases
+        except json.JSONDecodeError:
+            logger.warning(
+                "JSON inválido em LOONAR_LDAP_USER_BASE_*. "
+                "Usando fallback para formato legado.",
+                exc_info=True,
+            )
+            return {"Padrão": value}
+
+    # Compatibilidade com formato antigo (valor único)
+    return {"Padrão": value}
+
+
+def get_ldap_user_base_aliases(default: Optional[str] = None) -> dict[str, str]:
+    """Return LDAP user base aliases for current mode."""
+
+    raw_value = get_ldap_setting("LOONAR_LDAP_USER_BASE", default)
+    return parse_ldap_user_base_aliases(raw_value)

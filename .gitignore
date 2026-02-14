@@ -151,3 +151,5 @@ loonar/test-remote-2.txt
 backup
 
 *.bkp
+
+**/.venv/
