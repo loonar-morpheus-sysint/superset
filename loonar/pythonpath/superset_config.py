@@ -103,7 +103,11 @@ if not SECRET_KEY:
 
 # Usar LDAP quando LoonarSecurityManager estiver ativo, caso contrário DB
 AUTH_TYPE = AUTH_LDAP if _LOGIN_FORM_TYPE == "ldap" else AUTH_DB
-AUTH_USER_REGISTRATION = False
+_auth_user_registration_default = "true" if _LOGIN_FORM_TYPE == "ldap" else "false"
+AUTH_USER_REGISTRATION = (
+    os.getenv("AUTH_USER_REGISTRATION", _auth_user_registration_default).strip().lower()
+    == "true"
+)
 AUTH_USER_REGISTRATION_ROLE = "Gamma"
 
 _ldap_mode = os.getenv("LOONAR_LDAP_MODE", "real").strip().lower()
