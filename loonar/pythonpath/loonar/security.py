@@ -192,10 +192,12 @@ class LoonarSecurityManager(SupersetSecurityManager):
         password: str,
         selected_ldap_user_base: str,
     ) -> Optional[User]:
-        original_auth_ldap_search = getattr(self, "auth_ldap_search", None)
+        config = current_app.config
+        had_auth_ldap_search = "AUTH_LDAP_SEARCH" in config
+        original_auth_ldap_search = config.get("AUTH_LDAP_SEARCH")
         try:
             with self._ldap_auth_lock:
-                self.auth_ldap_search = selected_ldap_user_base
+                config["AUTH_LDAP_SEARCH"] = selected_ldap_user_base
 
                 # Verifica se o usuário já existe no banco ANTES da autenticação
                 existing_user = self.find_user(username=username)
@@ -228,11 +230,14 @@ class LoonarSecurityManager(SupersetSecurityManager):
             )
             # Retorna o usuário mesmo que a sincronização de roles falhe
             with self._ldap_auth_lock:
-                self.auth_ldap_search = selected_ldap_user_base
+                config["AUTH_LDAP_SEARCH"] = selected_ldap_user_base
                 return super().auth_user_ldap(username, password)
         finally:
             with self._ldap_auth_lock:
-                self.auth_ldap_search = original_auth_ldap_search
+                if had_auth_ldap_search:
+                    config["AUTH_LDAP_SEARCH"] = original_auth_ldap_search
+                else:
+                    config.pop("AUTH_LDAP_SEARCH", None)
 
     def _sync_roles_from_ldap_groups(
         self,
