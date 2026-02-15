@@ -269,7 +269,7 @@ def sync_user(payload: dict[str, object], base_role_name: str) -> tuple[bool, st
     
     # Validar email: se inválido, usar padrão
     if not email or email.startswith("http://") or email.startswith("https://") or "@" not in email:
-        email_template = os.environ.get("AD_EMAIL_INVALID", "<usuario>@sondadc.local")
+        email_template = os.environ.get("AD_EMAIL_INVALID", "<usuario>@loonardc.local")
         email = email_template.replace("<usuario>", username)
         print(f"Email inválido para usuário '{username}' - usando padrão: {email}", file=sys.stderr)
     

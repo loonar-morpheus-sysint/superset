@@ -119,6 +119,7 @@ ensure_container_running() {
 reset_user_password() {
   local username="$1"
   local output=""
+  local control_line=""
 
   if ! output=$(docker exec -i "$RESOLVED_SUPERSET_CONTAINER" python3 - "$username" <<'PY'
 from __future__ import annotations
@@ -135,7 +136,8 @@ def main(username: str) -> None:
     with app.app_context():
         user = security_manager.find_user(username=username)
         if user is None:
-            raise SystemExit(f"USER_NOT_FOUND:{username}")
+      print(f"USER_NOT_FOUND:{username}")
+      raise SystemExit(2)
 
         password = secrets.token_urlsafe(24)
         user.password = generate_password_hash(
@@ -156,14 +158,21 @@ if __name__ == "__main__":
 PY
   ); then
     printf '%s\n\n' "$output" >&2
-    if [[ "$output" == USER_NOT_FOUND:* ]]; then
+    control_line=$(printf '%s\n' "$output" | grep -E '^(PASSWORD_RESET_OK:|USER_NOT_FOUND:)' | tail -n 1 || true)
+    if [[ "$control_line" == USER_NOT_FOUND:* ]]; then
       error "Usuário '${username}' não encontrado no Superset."
     fi
     error "Falha ao resetar senha do usuário '${username}'."
   fi
 
-  if [[ "$output" == PASSWORD_RESET_OK:* ]]; then
-    local new_password="${output#PASSWORD_RESET_OK:}"
+  control_line=$(printf '%s\n' "$output" | grep -E '^(PASSWORD_RESET_OK:|USER_NOT_FOUND:)' | tail -n 1 || true)
+
+  if [[ "$control_line" == USER_NOT_FOUND:* ]]; then
+    error "Usuário '${username}' não encontrado no Superset."
+  fi
+
+  if [[ "$control_line" == PASSWORD_RESET_OK:* ]]; then
+    local new_password="${control_line#PASSWORD_RESET_OK:}"
     success "Senha resetada com sucesso para o usuário '${username}'. 🎉"
     secret_msg "Nova senha atribuída: ${new_password}"
     return 0

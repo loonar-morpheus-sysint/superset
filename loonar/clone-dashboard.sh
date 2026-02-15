@@ -5,7 +5,7 @@ clear
 set -euo pipefail
 
 # ─── Configurações ────────────────────────────────────────────────
-SUPERSET_URL="http://localhost:8088"     # URL base do Superset (sem barra no final). Se preenchido aqui, tem prioridade sobre .env
+SUPERSET_URL=""     # URL base do Superset (sem barra no final). Se preenchido aqui, tem prioridade sobre .env
 SUPERSET_USER=""
 SUPERSET_PASS=""
 DASHBOARD_ID=""                          # Dashboard modelo (origem dos clones)
