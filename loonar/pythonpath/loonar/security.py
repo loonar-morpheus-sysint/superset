@@ -15,8 +15,11 @@
 from __future__ import annotations
 
 import logging
+import os
+import socket
 from threading import Lock
 from typing import List, Optional
+from urllib.parse import urlparse
 
 from flask import current_app, flash, redirect, request, Response
 from flask_appbuilder import AppBuilder, expose
@@ -24,7 +27,7 @@ from flask_appbuilder.security.forms import LoginForm_db
 from flask_appbuilder.security.manager import AUTH_LDAP
 from flask_appbuilder.security.sqla.models import User
 from flask_appbuilder.security.views import AuthDBView
-from flask_babel import gettext as _
+from flask_babel import get_locale, gettext as _
 from flask_login import login_user
 from ldap3 import ALL, Connection, Server, SUBTREE
 from ldap3.core.exceptions import LDAPException
@@ -46,7 +49,7 @@ class LoonarLoginForm(LoginForm_db):
 
 class LoonarAuthDBView(AuthDBView):
     form = LoonarLoginForm
-    template = "loonar/security/login.html"
+    template = "security/login.html"
 
     @expose("/login/", methods=["GET", "POST"])
     def login(self) -> Response:
@@ -62,11 +65,19 @@ class LoonarAuthDBView(AuthDBView):
             if result:
                 return result
 
+        login_form_type = os.getenv("SUPERSET_LOGIN_FORM_TYPE", "ldap").strip().lower()
+        locale = str(get_locale() or "")
+        ldap_profile_label = (
+            "Perfil do usuário" if locale.lower().startswith("pt") else "User Profile"
+        )
+
         return self.render_template(
             self.template,
             title=self.title,
             form=form,
             ldap_login_enabled=current_app.config.get("AUTH_TYPE") == AUTH_LDAP,
+            login_form_type=login_form_type,
+            ldap_profile_label=ldap_profile_label,
             appbuilder=self.appbuilder,
         )
 
@@ -104,6 +115,11 @@ class LoonarAuthDBView(AuthDBView):
         try:
             selected_alias = (form.ldap_user_base_alias.data or "").strip()
             sm = self.appbuilder.sm
+
+            if hasattr(sm, "is_ldap_server_reachable") and not sm.is_ldap_server_reachable():
+                flash(_("Servidor de autenticação indisponível"), "danger")
+                return None
+
             if hasattr(sm, "auth_user_ldap_with_alias"):
                 user = sm.auth_user_ldap_with_alias(
                     form.username.data,
@@ -122,7 +138,7 @@ class LoonarAuthDBView(AuthDBView):
                 f"Erro de conexão LDAP para usuário {form.username.data}: {str(ex)}",
                 exc_info=True,
             )
-            flash(_("Erro ao conectar ao Active Directory. Tente novamente."), "danger")
+            flash(_("Servidor de autenticação indisponível"), "danger")
             return None
         except Exception as ex:
             logger.error(
@@ -161,6 +177,31 @@ class LoonarSecurityManager(SupersetSecurityManager):
 
     def get_ldap_user_base_choices(self) -> list[tuple[str, str]]:
         return [(alias, alias) for alias in self.ldap_user_base_aliases.keys()]
+
+    def is_ldap_server_reachable(self) -> bool:
+        server_uri = (self.auth_ldap_server or "").strip()
+        if not server_uri:
+            return False
+
+        parsed = urlparse(server_uri)
+        host = parsed.hostname or ""
+        if not host:
+            return False
+
+        default_port = 636 if parsed.scheme == "ldaps" else 389
+        port = parsed.port or default_port
+
+        timeout_setting = get_ldap_setting("LOONAR_LDAP_CONNECT_TIMEOUT", "3")
+        try:
+            timeout = float(timeout_setting)
+        except (TypeError, ValueError):
+            timeout = 3.0
+
+        try:
+            with socket.create_connection((host, port), timeout=timeout):
+                return True
+        except OSError:
+            return False
 
     def _resolve_ldap_user_base_from_alias(self, selected_alias: Optional[str]) -> str:
         alias = (selected_alias or "").strip()

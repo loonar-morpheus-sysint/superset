@@ -12,30 +12,50 @@
    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
    See the License for the specific language governing permissions and
    limitations under the License. #}
-{% extends "appbuilder/general/security/base.html" %}
-{% import "appbuilder/general/lib.html" as lib %}
+{% extends "appbuilder/base.html" %}
 
-{% block body %}
+{% block head_css %}
+{{ super() }}
+<style>
+  .navbar.navbar-inverse {
+    background: transparent !important;
+    background-image: none !important;
+    border-color: transparent !important;
+    box-shadow: none !important;
+  }
+
+  .navbar.navbar-inverse .navbar-brand,
+  .navbar.navbar-inverse .navbar-nav > li > a,
+  .navbar.navbar-inverse .navbar-text,
+  .navbar.navbar-inverse .navbar-link,
+  .navbar.navbar-inverse .navbar-nav > .open > a,
+  .navbar.navbar-inverse .navbar-nav > .open > a:hover,
+  .navbar.navbar-inverse .navbar-nav > .open > a:focus {
+    color: #2c3e50 !important;
+    background: transparent !important;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
 <div class="container">
   <div id="loginbox" style="margin-top:50px;" class="mainbox col-md-6 col-md-offset-3 col-sm-8 col-sm-offset-2">
-    {{ lib.render_flashed_messages() }}
-    <div class="panel panel-primary">
-      <div class="panel-heading">
+    {% include "appbuilder/flash.html" %}
+    <div class="panel panel-default">
+      <div class="panel-heading" style="background: transparent; border-bottom: 0;">
         <div class="panel-title text-center">
           <img
             src="/static/assets/images/loonar/logo-light.png"
             alt="Loonar FinOps"
             style="max-height: 44px; margin-bottom: 8px;"
           />
-          <div>{{ _("Entrar no Superset") }}</div>
         </div>
       </div>
       <div style="padding-top:30px" class="panel-body">
         <form id="loonar-login-form" class="form" method="post" name="login">
             {{ form.hidden_tag() }}
-            <div class="help-block">{{ _("Entre com usuário e senha abaixo") }}:</div>
             <div class="control-group{% if form.errors.username is defined %} error{% endif %}">
-              <label class="control-label" for="username">{{ _("Nome de usuário") }}:</label>
+              <label class="control-label" for="username">{{ _("Username") }}:</label>
               <div class="controls">
                 <div class="input-group">
                   <span class="input-group-addon"><i class="fa fa-user"></i></span>
@@ -48,7 +68,7 @@
             </div>
 
             <div class="control-group{% if form.errors.password is defined %} error{% endif %}">
-              <label class="control-label" for="password">{{ _("Senha") }}:</label>
+              <label class="control-label" for="password">{{ _("Password") }}:</label>
               <div class="controls">
                 <div class="input-group">
                   <span class="input-group-addon"><i class="fa fa-key"></i></span>
@@ -60,9 +80,9 @@
               </div>
             </div>
 
-            {% if ldap_login_enabled and form.ldap_user_base_alias and form.ldap_user_base_alias.choices %}
+            {% if login_form_type == "ldap" and ldap_login_enabled and form.ldap_user_base_alias and form.ldap_user_base_alias.choices %}
             <div class="control-group">
-              <label class="control-label" for="ldap_user_base_alias">{{ _("Contexto LDAP") }}:</label>
+              <label class="control-label" for="ldap_user_base_alias">{{ ldap_profile_label }}:</label>
               <div class="controls">
                 <div class="input-group">
                   <span class="input-group-addon"><i class="fa fa-sitemap"></i></span>
@@ -77,28 +97,30 @@
               <div class="controls">
                 <label for="remember_me">
                   {{ form.remember_me(id="remember_me") }}
-                {{ _("Manter sessão (apenas para login do banco)") }}
+                {{ _("Keep me signed in (database login only)") }}
                 </label>
               </div>
             </div>
             {% endif %}
 
-            <p class="help-block" style="margin-top: 14px;">
-              {{ _("Escolha o provedor no botão correspondente abaixo.") }}
-            </p>
-
             <div class="control-group">
               <div class="controls">
-                <button type="submit" class="btn btn-primary btn-block" data-auth-provider="database">
-                {{ _("Entrar com Banco de Dados do Superset") }}
+                <button
+                  type="submit"
+                  class="btn btn-primary btn-block"
+                  data-auth-provider="database"
+                  data-hidden-reason="{% if login_form_type != 'superset' %}hidden-when-not-superset{% else %}visible{% endif %}"
+                  {% if login_form_type != 'superset' %}style="display: none;"{% endif %}
+                >
+                {{ _("Sign in with") }} {{ _("Superset Database") }}
                 </button>
                 <button
                   type="submit"
-                  class="btn btn-default btn-block"
+                  class="btn btn-primary btn-block"
                   style="margin-top: 8px;"
                   data-auth-provider="ldap"
                 >
-                {{ _("Entrar com Active Directory") }}
+                {{ _("Sign in") }}
                 </button>
               </div>
             </div>

@@ -15151,3 +15151,13 @@ msgstr ""
 
 msgid "Themes"
 msgstr "Temas"
+
+msgid "User Profile"
+msgstr "Perfil do Usuário"
+
+msgid "Keep me signed in (database login only)"
+msgstr "Manter sessão (apenas para login do banco)"
+
+
+msgid "Superset Database"
+msgstr "Banco de Dados do Superset"

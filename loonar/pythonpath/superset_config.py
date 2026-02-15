@@ -78,7 +78,7 @@ _security_manager: Type[SecurityManager] = (
     SupersetSecurityManager if _LOGIN_FORM_TYPE == "superset" else LoonarSecurityManager
 )
 _login_template: Optional[str] = (
-    None if _LOGIN_FORM_TYPE == "superset" else "loonar/security/login.html"
+    None if _LOGIN_FORM_TYPE == "superset" else "security/login.html"
 )
 
 # Atribuições finais
