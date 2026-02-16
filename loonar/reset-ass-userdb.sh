@@ -136,8 +136,8 @@ def main(username: str) -> None:
     with app.app_context():
         user = security_manager.find_user(username=username)
         if user is None:
-      print(f"USER_NOT_FOUND:{username}")
-      raise SystemExit(2)
+            print(f"USER_NOT_FOUND:{username}")
+            raise SystemExit(2)
 
         password = secrets.token_urlsafe(24)
         user.password = generate_password_hash(
