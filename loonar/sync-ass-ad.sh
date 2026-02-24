@@ -91,10 +91,30 @@ SUPERSET_CONTAINER_NAME="superset_app"
 AD_GROUPS=()
 RESOLVED_SUPERSET_CONTAINER=""
 OU_ENTRIES=()
+PARTIAL_ISSUES=()
 
 exit_with_error() {
   printf '%s\n' "$1" >&2
   exit 1
+}
+
+add_partial_issue() {
+  local message="$1"
+  PARTIAL_ISSUES+=("$message")
+}
+
+print_final_status() {
+  if (( ${#PARTIAL_ISSUES[@]} == 0 )); then
+    printf '\n✓ Sincronização concluída com sucesso!\n' >&2
+    return
+  fi
+
+  printf '\n⚠ Sincronização concluída parcialmente.\n' >&2
+  printf 'Erros/alertas encontrados (%d):\n' "${#PARTIAL_ISSUES[@]}" >&2
+  local issue
+  for issue in "${PARTIAL_ISSUES[@]}"; do
+    printf '  - %s\n' "$issue" >&2
+  done
 }
 
 ensure_command() {
@@ -234,13 +254,19 @@ fetch_ad_groups() {
     ou_dn="${entry#*$'\t'}"
 
     if ! raw_output=$(ldap_search "$ou_dn" "$filter" cn); then
+      local first_error_line
+      first_error_line=$(printf '%s\n' "$raw_output" | head -n 1)
       if is_ldap_no_object_error "$raw_output"; then
         printf 'OU "%s" (%s): não encontrada no LDAP (NO_OBJECT) - pulando\n' "$ou_name" "$ou_dn" >&2
+        add_partial_issue "OU '${ou_name}' (${ou_dn}) não encontrada no LDAP durante busca de grupos"
         ((skipped_ou_count+=1))
         continue
       fi
+      printf 'OU "%s" (%s): erro ao buscar grupos - pulando\n' "$ou_name" "$ou_dn" >&2
       printf '%s\n' "$raw_output" >&2
-      exit 1
+      add_partial_issue "Erro ao buscar grupos na OU '${ou_name}' (${ou_dn}): ${first_error_line}"
+      ((skipped_ou_count+=1))
+      continue
     fi
 
     mapfile -t ou_groups < <(printf '%s\n' "$raw_output" | awk -F': ' '/^cn: / {print $2}' | sort -u)
@@ -290,18 +316,41 @@ def sync_roles(base_role_name: str, groups: list[str]) -> None:
         print(f"DEBUG: Sincronizando {len(groups)} grupos: {groups}", file=sys.stderr)
         
         created_count = 0
+        existing_count = 0
+        failed: list[str] = []
         for group in groups:
+          try:
             role = security_manager.find_role(group)
             if role is None:
-                print(f"DEBUG: Criando role '{group}'", file=sys.stderr)
-                role = security_manager.add_role(group)
-                role.permissions = list(base_role.permissions)
-                db.session.add(role)
-                created_count += 1
+              print(f"DEBUG: Criando role '{group}'", file=sys.stderr)
+              role = security_manager.add_role(group)
+              role.permissions = list(base_role.permissions)
+              db.session.add(role)
+              db.session.commit()
+              created_count += 1
             else:
-                print(f"DEBUG: Role '{group}' já existe - mantendo inalterada", file=sys.stderr)
-        db.session.commit()
+              print(f"DEBUG: Role '{group}' já existe - mantendo inalterada", file=sys.stderr)
+              existing_count += 1
+          except Exception as exc:  # noqa: BLE001
+            db.session.rollback()
+            failed.append(f"{group}: {exc}")
+            print(f"DEBUG: Falha ao sincronizar role '{group}': {exc}", file=sys.stderr)
+
         print(f"Roles criadas: {created_count}", file=sys.stderr)
+        print(f"Roles existentes: {existing_count}", file=sys.stderr)
+        print(f"Roles com falha: {len(failed)}", file=sys.stderr)
+        print(
+          "ROLES_SYNC_SUMMARY:"
+          + json.dumps(
+            {
+              "total": len(groups),
+              "created": created_count,
+              "existing": existing_count,
+              "failed": len(failed),
+              "failed_items": failed,
+            }
+          )
+        )
 
 
 if __name__ == "__main__":
@@ -316,13 +365,35 @@ if __name__ == "__main__":
         raise SystemExit("Entrada inválida: esperado JSON list")
     
     sync_roles(sys.argv[1], payload)
-    print(f"ROLES_SYNC_OK:{len(payload)}")
 PY
   ); then
     printf '%s\n' "$output" >&2
     exit 1
   fi
-  
+
+  local roles_summary
+  roles_summary=$(printf '%s\n' "$output" | grep '^ROLES_SYNC_SUMMARY:' || true)
+  if [[ -n "$roles_summary" ]]; then
+    local role_failed_count
+    role_failed_count=$(python3 - "$roles_summary" <<'PY'
+import json
+import sys
+
+line = sys.argv[1]
+if not line or not line.startswith("ROLES_SYNC_SUMMARY:"):
+    print(0)
+    raise SystemExit(0)
+
+payload = json.loads(line.split(":", 1)[1])
+print(payload.get("failed", 0))
+PY
+)
+    if [[ "$role_failed_count" != "0" ]]; then
+      add_partial_issue "Falhas na sincronização de roles: ${role_failed_count}"
+      printf '%s\n' "$roles_summary" >&2
+    fi
+  fi
+
   printf '%s\n' "$output" >&2
 }
 
@@ -341,13 +412,19 @@ fetch_ad_users_json() {
     ou_dn="${entry#*$'\t'}"
 
     if ! raw_output=$(ldap_search "$ou_dn" "(&(objectClass=user)(sAMAccountName=*))" sAMAccountName givenName sn mail userPrincipalName memberOf); then
+      local first_error_line
+      first_error_line=$(printf '%s\n' "$raw_output" | head -n 1)
       if is_ldap_no_object_error "$raw_output"; then
         printf 'OU "%s" (%s): não encontrada no LDAP (NO_OBJECT) - pulando\n' "$ou_name" "$ou_dn" >&2
+        add_partial_issue "OU '${ou_name}' (${ou_dn}) não encontrada no LDAP durante busca de usuários"
         ((skipped_ou_count+=1))
         continue
       fi
+      printf 'OU "%s" (%s): erro ao buscar usuários - pulando\n' "$ou_name" "$ou_dn" >&2
       printf '%s\n' "$raw_output" >&2
-      exit 1
+      add_partial_issue "Erro ao buscar usuários na OU '${ou_name}' (${ou_dn}): ${first_error_line}"
+      ((skipped_ou_count+=1))
+      continue
     fi
 
     ou_users_json=$(printf '%s\n' "$raw_output" | python3 -c $'import json\nimport re\nimport sys\n\nfilter_term = sys.argv[1]\nraw_lines = sys.stdin.read().splitlines()\n\nlines = []\nfor line in raw_lines:\n    if line.startswith(" ") and lines:\n        lines[-1] += line[1:]\n    else:\n        lines.append(line)\n\nusers = []\nentry: dict[str, object] = {}\n\nfor line in lines + [""]:\n    if line == "":\n        if entry.get("sAMAccountName"):\n            users.append(entry)\n        entry = {}\n        continue\n    if ":" not in line:\n        continue\n    key, val = line.split(":", 1)\n    val = val.lstrip()\n    if key == "memberOf":\n        entry.setdefault("memberOf", []).append(val)\n    else:\n        entry[key] = val\n\n\ndef dn_to_cn(dn: str) -> str | None:\n    match = re.match(r"CN=([^,]+)", dn, re.IGNORECASE)\n    return match.group(1) if match else None\n\n\nresult = []\nfor user in users:\n    username = user.get("sAMAccountName")\n    if not isinstance(username, str) or not username:\n        continue\n    groups = [\n        cn\n        for dn in user.get("memberOf", [])\n        if isinstance(dn, str) and (cn := dn_to_cn(dn))\n    ]\n    if filter_term:\n        groups = [group for group in groups if filter_term in group]\n    if not groups:\n        continue\n\n    first_name = user.get("givenName") or username\n    last_name = user.get("sn") or username\n    email = user.get("mail") or user.get("userPrincipalName") or f"{username}@invalid.local"\n\n    result.append(\n        {\n            "username": username,\n            "first_name": first_name,\n            "last_name": last_name,\n            "email": email,\n            "roles": sorted(set(groups)),\n        }\n    )\n\nprint(json.dumps(result))' "$AD_GROUP_FILTERTERM")
@@ -431,47 +508,47 @@ def ensure_role(base_role_name: str, role_name: str):
 
 
 def sync_user(payload: dict[str, object], base_role_name: str) -> tuple[bool, str]:
-    username = str(payload.get("username"))
+  username = str(payload.get("username"))
+  try:
     first_name = str(payload.get("first_name"))
     last_name = str(payload.get("last_name"))
     email = str(payload.get("email"))
-    
+
     # Validar email: se inválido, usar padrão
     if not email or email.startswith("http://") or email.startswith("https://") or "@" not in email:
-        email_template = os.environ.get("AD_EMAIL_INVALID", "<usuario>@loonardc.local")
-        email = email_template.replace("<usuario>", username)
-        print(f"Email inválido para usuário '{username}' - usando padrão: {email}", file=sys.stderr)
-    
+      email_template = os.environ.get("AD_EMAIL_INVALID", "<usuario>@loonardc.local")
+      email = email_template.replace("<usuario>", username)
+      print(f"Email inválido para usuário '{username}' - usando padrão: {email}", file=sys.stderr)
+
     roles = [ensure_role(base_role_name, role) for role in payload.get("roles", [])]
     if not roles:
-        return False, username
+      return False, username
 
     user = security_manager.find_user(username=username)
     if user is None:
-        try:
-            password = secrets.token_urlsafe(24)
-            user = security_manager.add_user(
-                username,
-                first_name,
-                last_name,
-                email,
-                roles[0],
-                password=password,
-            )
-            # add_user pode retornar False em caso de erro
-            if not user:
-                print(f"Falha ao criar usuário '{username}' - add_user retornou False", file=sys.stderr)
-                return False, username
-            
-            user.roles = roles
-            db.session.add(user)
-            return True, username
-        except Exception as e:
-            print(f"Erro ao criar usuário '{username}': {e}", file=sys.stderr)
-            db.session.rollback()
-            return False, username
-    else:
+      password = secrets.token_urlsafe(24)
+      user = security_manager.add_user(
+        username,
+        first_name,
+        last_name,
+        email,
+        roles[0],
+        password=password,
+      )
+      # add_user pode retornar False em caso de erro
+      if not user:
+        print(f"Falha ao criar usuário '{username}' - add_user retornou False", file=sys.stderr)
         return False, username
+
+      user.roles = roles
+      db.session.add(user)
+      return True, username
+
+    return False, username
+  except Exception as e:  # noqa: BLE001
+    print(f"Erro ao criar/sincronizar usuário '{username}': {e}", file=sys.stderr)
+    db.session.rollback()
+    return False, f"{username}:{e}"
 
 
 def main(base_role_name: str) -> None:
@@ -482,6 +559,9 @@ def main(base_role_name: str) -> None:
     app = create_app()
     with app.app_context():
         created_count = 0
+      existing_count = 0
+      failed_count = 0
+      failed_items: list[str] = []
         for user_payload in payload:
             if isinstance(user_payload, dict):
                 was_created, username = sync_user(user_payload, base_role_name)
@@ -489,21 +569,65 @@ def main(base_role_name: str) -> None:
                     print(f"Usuário criado: {username}", file=sys.stderr)
                     created_count += 1
                 else:
-                    print(f"Usuário já existe - mantendo inalterado: {username}", file=sys.stderr)
+            if ":" in username:
+              failed_count += 1
+              failed_items.append(username)
+              print(f"Falha ao sincronizar usuário: {username}", file=sys.stderr)
+            else:
+              print(f"Usuário já existe - mantendo inalterado: {username}", file=sys.stderr)
+              existing_count += 1
         db.session.commit()
         print(f"Usuários criados: {created_count}", file=sys.stderr)
+      print(f"Usuários existentes: {existing_count}", file=sys.stderr)
+      print(f"Usuários com falha: {failed_count}", file=sys.stderr)
+      print(
+        "USERS_SYNC_SUMMARY:"
+        + json.dumps(
+          {
+            "total": len(payload),
+            "created": created_count,
+            "existing": existing_count,
+            "failed": failed_count,
+            "failed_items": failed_items,
+          }
+        )
+      )
 
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
         raise SystemExit("Uso: sync_users.py <role_base>")
     main(sys.argv[1])
-    print("USERS_SYNC_OK")
 PY
   ); then
     printf '%s\n' "$output" >&2
     exit 1
   fi
+
+  local users_summary
+  users_summary=$(printf '%s\n' "$output" | grep '^USERS_SYNC_SUMMARY:' || true)
+  if [[ -n "$users_summary" ]]; then
+    local user_failed_count
+    user_failed_count=$(python3 - "$users_summary" <<'PY'
+import json
+import sys
+
+line = sys.argv[1]
+if not line or not line.startswith("USERS_SYNC_SUMMARY:"):
+    print(0)
+    raise SystemExit(0)
+
+payload = json.loads(line.split(":", 1)[1])
+print(payload.get("failed", 0))
+PY
+)
+    if [[ "$user_failed_count" != "0" ]]; then
+      add_partial_issue "Falhas na sincronização de usuários: ${user_failed_count}"
+      printf '%s\n' "$users_summary" >&2
+    fi
+  fi
+
+  printf '%s\n' "$output" >&2
 }
 
 main() {
@@ -529,8 +653,8 @@ main() {
   fi
 
   sync_users_in_superset "$users_json"
-  
-  printf '\n✓ Sincronização concluída com sucesso!\n' >&2
+
+  print_final_status
 }
 
 main "$@"
