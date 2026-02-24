@@ -61,6 +61,7 @@ AD_EMAIL_INVALID="${LOONAR_LDAP_EMAIL_DOMAIN:-}"
 SUPERSET_CONTAINER_NAME="superset_app"
 AD_GROUPS=()
 RESOLVED_SUPERSET_CONTAINER=""
+OU_ENTRIES=()
 
 exit_with_error() {
   printf '%s\n' "$1" >&2
@@ -112,11 +113,35 @@ validate_env() {
   if (( ${#missing[@]} > 0 )); then
     exit_with_error "Variáveis obrigatórias ausentes: ${missing[*]}"
   fi
+
+  if ! mapfile -t OU_ENTRIES < <(python3 - "$AD_DN_BASE" <<'PY'
+import json
+import sys
+
+raw = sys.argv[1]
+try:
+    data = json.loads(raw)
+except json.JSONDecodeError as exc:
+    raise SystemExit(f"AD_DN_BASE deve ser um JSON válido: {exc}") from exc
+
+if not isinstance(data, dict) or not data:
+    raise SystemExit("AD_DN_BASE deve ser um JSON com pares {\"nome\": \"OU\"} e não pode estar vazio")
+
+for name, dn in data.items():
+    if not isinstance(name, str) or not isinstance(dn, str) or not name or not dn:
+        raise SystemExit("AD_DN_BASE deve conter chaves e valores string não vazios")
+    print(f"{name}\t{dn}")
+PY
+  ); then
+    exit_with_error "AD_DN_BASE inválido. Verifique o JSON nas variáveis LOONAR_LDAP_USER_BASE_*"
+  fi
 }
 
 ldap_search_or_die() {
+  local base_dn="$1"
+  shift
   local output
-  if ! output=$(LDAPTLS_REQCERT=allow ldapsearch -LLL -x -H "$AD_URI" -D "$AD_SVC_USER" -w "$AD_SVC_PASSWORD" -b "$AD_DN_BASE" "$@" 2>&1); then
+  if ! output=$(LDAPTLS_REQCERT=allow ldapsearch -LLL -x -H "$AD_URI" -D "$AD_SVC_USER" -w "$AD_SVC_PASSWORD" -b "$base_dn" "$@" 2>&1); then
     printf '%s\n' "$output" >&2
     exit 1
   fi
@@ -156,12 +181,32 @@ PY
 fetch_ad_groups() {
   local filter="(&(objectClass=group)(cn=*${AD_GROUP_FILTERTERM}*))"
   local raw_output
-  raw_output=$(ldap_search_or_die "$filter" cn)
-  mapfile -t AD_GROUPS < <(printf '%s\n' "$raw_output" | awk -F': ' '/^cn: / {print $2}' | sort -u)
-  
-  printf 'Grupos encontrados no AD: %d\n' "${#AD_GROUPS[@]}" >&2
+  local ou_name
+  local ou_dn
+  local -a ou_groups
+
+  AD_GROUPS=()
+
+  for entry in "${OU_ENTRIES[@]}"; do
+    ou_name="${entry%%$'\t'*}"
+    ou_dn="${entry#*$'\t'}"
+
+    raw_output=$(ldap_search_or_die "$ou_dn" "$filter" cn)
+    mapfile -t ou_groups < <(printf '%s\n' "$raw_output" | awk -F': ' '/^cn: / {print $2}' | sort -u)
+
+    printf 'OU "%s" (%s): %d grupos encontrados\n' "$ou_name" "$ou_dn" "${#ou_groups[@]}" >&2
+    if (( ${#ou_groups[@]} > 0 )); then
+      printf 'OU "%s": grupos: %s\n' "$ou_name" "${ou_groups[*]}" >&2
+    fi
+
+    AD_GROUPS+=("${ou_groups[@]}")
+  done
+
+  mapfile -t AD_GROUPS < <(printf '%s\n' "${AD_GROUPS[@]}" | sort -u)
+
+  printf 'Grupos totais (únicos) encontrados no AD: %d\n' "${#AD_GROUPS[@]}" >&2
   if (( ${#AD_GROUPS[@]} > 0 )); then
-    printf 'Grupos: %s\n' "${AD_GROUPS[*]}" >&2
+    printf 'Grupos totais: %s\n' "${AD_GROUPS[*]}" >&2
   fi
 }
 
@@ -229,10 +274,68 @@ PY
 }
 
 fetch_ad_users_json() {
+  local users_json_parts=()
+  local ou_name
+  local ou_dn
   local raw_output
-  raw_output=$(ldap_search_or_die "(&(objectClass=user)(sAMAccountName=*))" sAMAccountName givenName sn mail userPrincipalName memberOf)
+  local ou_users_json
+  local ou_users_count
 
-  printf '%s\n' "$raw_output" | python3 -c $'import json\nimport re\nimport sys\n\nfilter_term = sys.argv[1]\nraw_lines = sys.stdin.read().splitlines()\n\nlines = []\nfor line in raw_lines:\n    if line.startswith(" ") and lines:\n        lines[-1] += line[1:]\n    else:\n        lines.append(line)\n\nusers = []\nentry: dict[str, object] = {}\n\nfor line in lines + [""]:\n    if line == "":\n        if entry.get("sAMAccountName"):\n            users.append(entry)\n        entry = {}\n        continue\n    if ":" not in line:\n        continue\n    key, val = line.split(":", 1)\n    val = val.lstrip()\n    if key == "memberOf":\n        entry.setdefault("memberOf", []).append(val)\n    else:\n        entry[key] = val\n\n\ndef dn_to_cn(dn: str) -> str | None:\n    match = re.match(r"CN=([^,]+)", dn, re.IGNORECASE)\n    return match.group(1) if match else None\n\n\nresult = []\nfor user in users:\n    username = user.get("sAMAccountName")\n    if not isinstance(username, str) or not username:\n        continue\n    groups = [\n        cn\n        for dn in user.get("memberOf", [])\n        if isinstance(dn, str) and (cn := dn_to_cn(dn))\n    ]\n    if filter_term:\n        groups = [group for group in groups if filter_term in group]\n    if not groups:\n        continue\n\n    first_name = user.get("givenName") or username\n    last_name = user.get("sn") or username\n    email = user.get("mail") or user.get("userPrincipalName") or f"{username}@invalid.local"\n\n    result.append(\n        {\n            "username": username,\n            "first_name": first_name,\n            "last_name": last_name,\n            "email": email,\n            "roles": sorted(set(groups)),\n        }\n    )\n\nprint(json.dumps(result))' "$AD_GROUP_FILTERTERM"
+  for entry in "${OU_ENTRIES[@]}"; do
+  ou_name="${entry%%$'\t'*}"
+  ou_dn="${entry#*$'\t'}"
+
+  raw_output=$(ldap_search_or_die "$ou_dn" "(&(objectClass=user)(sAMAccountName=*))" sAMAccountName givenName sn mail userPrincipalName memberOf)
+
+  ou_users_json=$(printf '%s\n' "$raw_output" | python3 -c $'import json\nimport re\nimport sys\n\nfilter_term = sys.argv[1]\nraw_lines = sys.stdin.read().splitlines()\n\nlines = []\nfor line in raw_lines:\n    if line.startswith(" ") and lines:\n        lines[-1] += line[1:]\n    else:\n        lines.append(line)\n\nusers = []\nentry: dict[str, object] = {}\n\nfor line in lines + [""]:\n    if line == "":\n        if entry.get("sAMAccountName"):\n            users.append(entry)\n        entry = {}\n        continue\n    if ":" not in line:\n        continue\n    key, val = line.split(":", 1)\n    val = val.lstrip()\n    if key == "memberOf":\n        entry.setdefault("memberOf", []).append(val)\n    else:\n        entry[key] = val\n\n\ndef dn_to_cn(dn: str) -> str | None:\n    match = re.match(r"CN=([^,]+)", dn, re.IGNORECASE)\n    return match.group(1) if match else None\n\n\nresult = []\nfor user in users:\n    username = user.get("sAMAccountName")\n    if not isinstance(username, str) or not username:\n        continue\n    groups = [\n        cn\n        for dn in user.get("memberOf", [])\n        if isinstance(dn, str) and (cn := dn_to_cn(dn))\n    ]\n    if filter_term:\n        groups = [group for group in groups if filter_term in group]\n    if not groups:\n        continue\n\n    first_name = user.get("givenName") or username\n    last_name = user.get("sn") or username\n    email = user.get("mail") or user.get("userPrincipalName") or f"{username}@invalid.local"\n\n    result.append(\n        {\n            "username": username,\n            "first_name": first_name,\n            "last_name": last_name,\n            "email": email,\n            "roles": sorted(set(groups)),\n        }\n    )\n\nprint(json.dumps(result))' "$AD_GROUP_FILTERTERM")
+
+  ou_users_count=$(python3 - "$ou_users_json" <<'PY'
+import json
+import sys
+
+raw = sys.argv[1]
+try:
+  data = json.loads(raw or "[]")
+except json.JSONDecodeError:
+  data = []
+
+print(len(data) if isinstance(data, list) else 0)
+PY
+)
+
+  printf 'OU "%s" (%s): %s usuários sincronizáveis\n' "$ou_name" "$ou_dn" "$ou_users_count" >&2
+  users_json_parts+=("$ou_users_json")
+  done
+
+  python3 - "${users_json_parts[@]}" <<'PY'
+import json
+import sys
+
+merged = []
+seen = set()
+
+for raw in sys.argv[1:]:
+  if not raw:
+    continue
+  try:
+    payload = json.loads(raw)
+  except json.JSONDecodeError:
+    continue
+  if not isinstance(payload, list):
+    continue
+  for item in payload:
+    if not isinstance(item, dict):
+      continue
+    username = item.get("username")
+    if not isinstance(username, str) or not username:
+      continue
+    if username in seen:
+      continue
+    seen.add(username)
+    merged.append(item)
+
+print(json.dumps(merged))
+PY
 }
 
 sync_users_in_superset() {
