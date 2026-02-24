@@ -508,47 +508,47 @@ def ensure_role(base_role_name: str, role_name: str):
 
 
 def sync_user(payload: dict[str, object], base_role_name: str) -> tuple[bool, str]:
-  username = str(payload.get("username"))
-  try:
-    first_name = str(payload.get("first_name"))
-    last_name = str(payload.get("last_name"))
-    email = str(payload.get("email"))
+    username = str(payload.get("username"))
+    try:
+        first_name = str(payload.get("first_name"))
+        last_name = str(payload.get("last_name"))
+        email = str(payload.get("email"))
 
-    # Validar email: se inválido, usar padrão
-    if not email or email.startswith("http://") or email.startswith("https://") or "@" not in email:
-      email_template = os.environ.get("AD_EMAIL_INVALID", "<usuario>@loonardc.local")
-      email = email_template.replace("<usuario>", username)
-      print(f"Email inválido para usuário '{username}' - usando padrão: {email}", file=sys.stderr)
+        # Validar email: se inválido, usar padrão
+        if not email or email.startswith("http://") or email.startswith("https://") or "@" not in email:
+            email_template = os.environ.get("AD_EMAIL_INVALID", "<usuario>@loonardc.local")
+            email = email_template.replace("<usuario>", username)
+            print(f"Email inválido para usuário '{username}' - usando padrão: {email}", file=sys.stderr)
 
-    roles = [ensure_role(base_role_name, role) for role in payload.get("roles", [])]
-    if not roles:
-      return False, username
+        roles = [ensure_role(base_role_name, role) for role in payload.get("roles", [])]
+        if not roles:
+            return False, username
 
-    user = security_manager.find_user(username=username)
-    if user is None:
-      password = secrets.token_urlsafe(24)
-      user = security_manager.add_user(
-        username,
-        first_name,
-        last_name,
-        email,
-        roles[0],
-        password=password,
-      )
-      # add_user pode retornar False em caso de erro
-      if not user:
-        print(f"Falha ao criar usuário '{username}' - add_user retornou False", file=sys.stderr)
+        user = security_manager.find_user(username=username)
+        if user is None:
+            password = secrets.token_urlsafe(24)
+            user = security_manager.add_user(
+                username,
+                first_name,
+                last_name,
+                email,
+                roles[0],
+                password=password,
+            )
+            # add_user pode retornar False em caso de erro
+            if not user:
+                print(f"Falha ao criar usuário '{username}' - add_user retornou False", file=sys.stderr)
+                return False, username
+
+            user.roles = roles
+            db.session.add(user)
+            return True, username
+
         return False, username
-
-      user.roles = roles
-      db.session.add(user)
-      return True, username
-
-    return False, username
-  except Exception as e:  # noqa: BLE001
-    print(f"Erro ao criar/sincronizar usuário '{username}': {e}", file=sys.stderr)
-    db.session.rollback()
-    return False, f"{username}:{e}"
+    except Exception as e:  # noqa: BLE001
+        print(f"Erro ao criar/sincronizar usuário '{username}': {e}", file=sys.stderr)
+        db.session.rollback()
+        return False, f"{username}:{e}"
 
 
 def main(base_role_name: str) -> None:
@@ -559,9 +559,9 @@ def main(base_role_name: str) -> None:
     app = create_app()
     with app.app_context():
         created_count = 0
-      existing_count = 0
-      failed_count = 0
-      failed_items: list[str] = []
+        existing_count = 0
+        failed_count = 0
+        failed_items: list[str] = []
         for user_payload in payload:
             if isinstance(user_payload, dict):
                 was_created, username = sync_user(user_payload, base_role_name)
@@ -569,29 +569,29 @@ def main(base_role_name: str) -> None:
                     print(f"Usuário criado: {username}", file=sys.stderr)
                     created_count += 1
                 else:
-            if ":" in username:
-              failed_count += 1
-              failed_items.append(username)
-              print(f"Falha ao sincronizar usuário: {username}", file=sys.stderr)
-            else:
-              print(f"Usuário já existe - mantendo inalterado: {username}", file=sys.stderr)
-              existing_count += 1
+                    if ":" in username:
+                        failed_count += 1
+                        failed_items.append(username)
+                        print(f"Falha ao sincronizar usuário: {username}", file=sys.stderr)
+                    else:
+                        print(f"Usuário já existe - mantendo inalterado: {username}", file=sys.stderr)
+                        existing_count += 1
         db.session.commit()
         print(f"Usuários criados: {created_count}", file=sys.stderr)
-      print(f"Usuários existentes: {existing_count}", file=sys.stderr)
-      print(f"Usuários com falha: {failed_count}", file=sys.stderr)
-      print(
-        "USERS_SYNC_SUMMARY:"
-        + json.dumps(
-          {
-            "total": len(payload),
-            "created": created_count,
-            "existing": existing_count,
-            "failed": failed_count,
-            "failed_items": failed_items,
-          }
+        print(f"Usuários existentes: {existing_count}", file=sys.stderr)
+        print(f"Usuários com falha: {failed_count}", file=sys.stderr)
+        print(
+            "USERS_SYNC_SUMMARY:"
+            + json.dumps(
+                {
+                    "total": len(payload),
+                    "created": created_count,
+                    "existing": existing_count,
+                    "failed": failed_count,
+                    "failed_items": failed_items,
+                }
+            )
         )
-      )
 
 
 if __name__ == "__main__":
