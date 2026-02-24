@@ -114,6 +114,9 @@ validate_env() {
     exit_with_error "Variáveis obrigatórias ausentes: ${missing[*]}"
   fi
 
+  # Limpar caracteres de quote inválidos (smartquotes Unicode) que podem vir de cópias/editores ricos
+  AD_DN_BASE=$(printf '%s' "$AD_DN_BASE" | tr -d "''""")
+
   if ! mapfile -t OU_ENTRIES < <(python3 - "$AD_DN_BASE" <<'PY'
 import json
 import sys
