@@ -172,15 +172,20 @@ PY
   fi
 }
 
-ldap_search_or_die() {
+ldap_search() {
   local base_dn="$1"
   shift
   local output
   if ! output=$(LDAPTLS_REQCERT=allow ldapsearch -LLL -x -H "$AD_URI" -D "$AD_SVC_USER" -w "$AD_SVC_PASSWORD" -b "$base_dn" "$@" 2>&1); then
-    printf '%s\n' "$output" >&2
-    exit 1
+    printf '%s' "$output"
+    return 1
   fi
   printf '%s' "$output"
+}
+
+is_ldap_no_object_error() {
+  local text="$1"
+  [[ "$text" == *"No such object (32)"* ]]
 }
 
 ensure_base_role_exists() {
@@ -219,6 +224,8 @@ fetch_ad_groups() {
   local ou_name
   local ou_dn
   local -a ou_groups
+  local processed_ou_count=0
+  local skipped_ou_count=0
 
   AD_GROUPS=()
 
@@ -226,8 +233,18 @@ fetch_ad_groups() {
     ou_name="${entry%%$'\t'*}"
     ou_dn="${entry#*$'\t'}"
 
-    raw_output=$(ldap_search_or_die "$ou_dn" "$filter" cn)
+    if ! raw_output=$(ldap_search "$ou_dn" "$filter" cn); then
+      if is_ldap_no_object_error "$raw_output"; then
+        printf 'OU "%s" (%s): não encontrada no LDAP (NO_OBJECT) - pulando\n' "$ou_name" "$ou_dn" >&2
+        ((skipped_ou_count+=1))
+        continue
+      fi
+      printf '%s\n' "$raw_output" >&2
+      exit 1
+    fi
+
     mapfile -t ou_groups < <(printf '%s\n' "$raw_output" | awk -F': ' '/^cn: / {print $2}' | sort -u)
+    ((processed_ou_count+=1))
 
     printf 'OU "%s" (%s): %d grupos encontrados\n' "$ou_name" "$ou_dn" "${#ou_groups[@]}" >&2
     if (( ${#ou_groups[@]} > 0 )); then
@@ -243,6 +260,7 @@ fetch_ad_groups() {
   if (( ${#AD_GROUPS[@]} > 0 )); then
     printf 'Grupos totais: %s\n' "${AD_GROUPS[*]}" >&2
   fi
+  printf 'Resumo OUs (grupos): %d processadas, %d puladas\n' "$processed_ou_count" "$skipped_ou_count" >&2
 }
 
 sync_roles_in_superset() {
@@ -315,16 +333,26 @@ fetch_ad_users_json() {
   local raw_output
   local ou_users_json
   local ou_users_count
+  local processed_ou_count=0
+  local skipped_ou_count=0
 
   for entry in "${OU_ENTRIES[@]}"; do
-  ou_name="${entry%%$'\t'*}"
-  ou_dn="${entry#*$'\t'}"
+    ou_name="${entry%%$'\t'*}"
+    ou_dn="${entry#*$'\t'}"
 
-  raw_output=$(ldap_search_or_die "$ou_dn" "(&(objectClass=user)(sAMAccountName=*))" sAMAccountName givenName sn mail userPrincipalName memberOf)
+    if ! raw_output=$(ldap_search "$ou_dn" "(&(objectClass=user)(sAMAccountName=*))" sAMAccountName givenName sn mail userPrincipalName memberOf); then
+      if is_ldap_no_object_error "$raw_output"; then
+        printf 'OU "%s" (%s): não encontrada no LDAP (NO_OBJECT) - pulando\n' "$ou_name" "$ou_dn" >&2
+        ((skipped_ou_count+=1))
+        continue
+      fi
+      printf '%s\n' "$raw_output" >&2
+      exit 1
+    fi
 
-  ou_users_json=$(printf '%s\n' "$raw_output" | python3 -c $'import json\nimport re\nimport sys\n\nfilter_term = sys.argv[1]\nraw_lines = sys.stdin.read().splitlines()\n\nlines = []\nfor line in raw_lines:\n    if line.startswith(" ") and lines:\n        lines[-1] += line[1:]\n    else:\n        lines.append(line)\n\nusers = []\nentry: dict[str, object] = {}\n\nfor line in lines + [""]:\n    if line == "":\n        if entry.get("sAMAccountName"):\n            users.append(entry)\n        entry = {}\n        continue\n    if ":" not in line:\n        continue\n    key, val = line.split(":", 1)\n    val = val.lstrip()\n    if key == "memberOf":\n        entry.setdefault("memberOf", []).append(val)\n    else:\n        entry[key] = val\n\n\ndef dn_to_cn(dn: str) -> str | None:\n    match = re.match(r"CN=([^,]+)", dn, re.IGNORECASE)\n    return match.group(1) if match else None\n\n\nresult = []\nfor user in users:\n    username = user.get("sAMAccountName")\n    if not isinstance(username, str) or not username:\n        continue\n    groups = [\n        cn\n        for dn in user.get("memberOf", [])\n        if isinstance(dn, str) and (cn := dn_to_cn(dn))\n    ]\n    if filter_term:\n        groups = [group for group in groups if filter_term in group]\n    if not groups:\n        continue\n\n    first_name = user.get("givenName") or username\n    last_name = user.get("sn") or username\n    email = user.get("mail") or user.get("userPrincipalName") or f"{username}@invalid.local"\n\n    result.append(\n        {\n            "username": username,\n            "first_name": first_name,\n            "last_name": last_name,\n            "email": email,\n            "roles": sorted(set(groups)),\n        }\n    )\n\nprint(json.dumps(result))' "$AD_GROUP_FILTERTERM")
+    ou_users_json=$(printf '%s\n' "$raw_output" | python3 -c $'import json\nimport re\nimport sys\n\nfilter_term = sys.argv[1]\nraw_lines = sys.stdin.read().splitlines()\n\nlines = []\nfor line in raw_lines:\n    if line.startswith(" ") and lines:\n        lines[-1] += line[1:]\n    else:\n        lines.append(line)\n\nusers = []\nentry: dict[str, object] = {}\n\nfor line in lines + [""]:\n    if line == "":\n        if entry.get("sAMAccountName"):\n            users.append(entry)\n        entry = {}\n        continue\n    if ":" not in line:\n        continue\n    key, val = line.split(":", 1)\n    val = val.lstrip()\n    if key == "memberOf":\n        entry.setdefault("memberOf", []).append(val)\n    else:\n        entry[key] = val\n\n\ndef dn_to_cn(dn: str) -> str | None:\n    match = re.match(r"CN=([^,]+)", dn, re.IGNORECASE)\n    return match.group(1) if match else None\n\n\nresult = []\nfor user in users:\n    username = user.get("sAMAccountName")\n    if not isinstance(username, str) or not username:\n        continue\n    groups = [\n        cn\n        for dn in user.get("memberOf", [])\n        if isinstance(dn, str) and (cn := dn_to_cn(dn))\n    ]\n    if filter_term:\n        groups = [group for group in groups if filter_term in group]\n    if not groups:\n        continue\n\n    first_name = user.get("givenName") or username\n    last_name = user.get("sn") or username\n    email = user.get("mail") or user.get("userPrincipalName") or f"{username}@invalid.local"\n\n    result.append(\n        {\n            "username": username,\n            "first_name": first_name,\n            "last_name": last_name,\n            "email": email,\n            "roles": sorted(set(groups)),\n        }\n    )\n\nprint(json.dumps(result))' "$AD_GROUP_FILTERTERM")
 
-  ou_users_count=$(python3 - "$ou_users_json" <<'PY'
+    ou_users_count=$(python3 - "$ou_users_json" <<'PY'
 import json
 import sys
 
@@ -338,9 +366,12 @@ print(len(data) if isinstance(data, list) else 0)
 PY
 )
 
-  printf 'OU "%s" (%s): %s usuários sincronizáveis\n' "$ou_name" "$ou_dn" "$ou_users_count" >&2
-  users_json_parts+=("$ou_users_json")
+    printf 'OU "%s" (%s): %s usuários sincronizáveis\n' "$ou_name" "$ou_dn" "$ou_users_count" >&2
+    users_json_parts+=("$ou_users_json")
+    ((processed_ou_count+=1))
   done
+
+  printf 'Resumo OUs (usuários): %d processadas, %d puladas\n' "$processed_ou_count" "$skipped_ou_count" >&2
 
   python3 - "${users_json_parts[@]}" <<'PY'
 import json
