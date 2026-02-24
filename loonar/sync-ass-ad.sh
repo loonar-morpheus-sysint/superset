@@ -32,32 +32,61 @@ else
   exit 1
 fi
 
-set -a
-# shellcheck disable=SC1090
-source "$ENV_FILE" 2>/dev/null || true
-set +a
+read_env_value() {
+  local key="$1"
+  python3 - "$ENV_FILE" "$key" <<'PY'
+from __future__ import annotations
 
-if [[ -z "${LOONAR_LDAP_MODE:-}" ]]; then
+import sys
+
+path = sys.argv[1]
+target = sys.argv[2]
+
+with open(path, encoding="utf-8") as handle:
+    for raw_line in handle:
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[len("export ") :].lstrip()
+        if "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        if key != target:
+            continue
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
+            value = value[1:-1]
+        print(value)
+        raise SystemExit(0)
+
+print("")
+PY
+}
+
+LOONAR_LDAP_MODE="$(read_env_value "LOONAR_LDAP_MODE")"
+if [[ -z "$LOONAR_LDAP_MODE" ]]; then
   echo "LOONAR_LDAP_MODE não está definido no $ENV_FILE" >&2
   exit 1
 fi
 
 if [[ "$LOONAR_LDAP_MODE" == "real" ]]; then
-  AD_URI="${LOONAR_LDAP_SERVER_REAL:-}"
-  AD_DN_BASE="${LOONAR_LDAP_USER_BASE_REAL:-}"
-  AD_SVC_USER="${LOONAR_LDAP_BIND_DN_REAL:-}"
-  AD_SVC_PASSWORD="${LOONAR_LDAP_BIND_PASSWORD_REAL:-}"
+  AD_URI="$(read_env_value "LOONAR_LDAP_SERVER_REAL")"
+  AD_DN_BASE="$(read_env_value "LOONAR_LDAP_USER_BASE_REAL")"
+  AD_SVC_USER="$(read_env_value "LOONAR_LDAP_BIND_DN_REAL")"
+  AD_SVC_PASSWORD="$(read_env_value "LOONAR_LDAP_BIND_PASSWORD_REAL")"
 else
-  AD_URI="${LOONAR_LDAP_SERVER_MOCK:-}"
-  AD_DN_BASE="${LOONAR_LDAP_USER_BASE_MOCK:-}"
-  AD_SVC_USER="${LOONAR_LDAP_BIND_DN_MOCK:-}"
-  AD_SVC_PASSWORD="${LOONAR_LDAP_BIND_PASSWORD_MOCK:-}"
+  AD_URI="$(read_env_value "LOONAR_LDAP_SERVER_MOCK")"
+  AD_DN_BASE="$(read_env_value "LOONAR_LDAP_USER_BASE_MOCK")"
+  AD_SVC_USER="$(read_env_value "LOONAR_LDAP_BIND_DN_MOCK")"
+  AD_SVC_PASSWORD="$(read_env_value "LOONAR_LDAP_BIND_PASSWORD_MOCK")"
 fi
 
 # Variáveis comuns (independem de mock/real)
-AD_GROUP_FILTERTERM="${LOONAR_LDAP_GROUP_FILTERTERM:-}"
-ASF_ROLE_BASE="${LOONAR_LDAP_BASE_ROLE:-}"
-AD_EMAIL_INVALID="${LOONAR_LDAP_EMAIL_DOMAIN:-}"
+AD_GROUP_FILTERTERM="$(read_env_value "LOONAR_LDAP_GROUP_FILTERTERM")"
+ASF_ROLE_BASE="$(read_env_value "LOONAR_LDAP_BASE_ROLE")"
+AD_EMAIL_INVALID="$(read_env_value "LOONAR_LDAP_EMAIL_DOMAIN")"
 SUPERSET_CONTAINER_NAME="superset_app"
 AD_GROUPS=()
 RESOLVED_SUPERSET_CONTAINER=""
@@ -114,8 +143,11 @@ validate_env() {
     exit_with_error "Variáveis obrigatórias ausentes: ${missing[*]}"
   fi
 
-  # Limpar caracteres de quote inválidos (smartquotes Unicode) que podem vir de cópias/editores ricos
-  AD_DN_BASE=$(printf '%s' "$AD_DN_BASE" | tr -d "''""")
+  # Normaliza aspas tipográficas comuns sem remover conteúdo válido.
+  AD_DN_BASE=${AD_DN_BASE//“/\"}
+  AD_DN_BASE=${AD_DN_BASE//”/\"}
+  AD_DN_BASE=${AD_DN_BASE//‘/\'}
+  AD_DN_BASE=${AD_DN_BASE//’/\'}
 
   if ! mapfile -t OU_ENTRIES < <(python3 - "$AD_DN_BASE" <<'PY'
 import json
