@@ -124,10 +124,12 @@
                   style="margin-top: 8px;"
                   data-auth-provider="ldap"
                 >
-                {% if is_pt %}
-                  Entrar
-                {% else %}
-                  {{ _("Sign in") }}
+                {% if login_form_type != 'db' and login_form_type != 'superset' %}
+                  {% if is_pt %}
+                    Entrar
+                  {% else %}
+                    {{ _("Sign in") }}
+                  {% endif %}
                 {% endif %}
                 </button>
               </div>
