@@ -496,18 +496,18 @@ from superset.extensions import db, security_manager
 
 
 def ensure_role(base_role_name: str, role_name: str):
-    base_role = security_manager.find_role(base_role_name)
-    if base_role is None:
-        raise SystemExit(f"Role base não encontrada: {base_role_name}")
     role = security_manager.find_role(role_name)
     if role is None:
+    base_role = security_manager.find_role(base_role_name)
+    if base_role is None:
+      raise SystemExit(f"Role base não encontrada: {base_role_name}")
         role = security_manager.add_role(role_name)
     role.permissions = list(base_role.permissions)
     db.session.add(role)
     return role
 
 
-def sync_user(payload: dict[str, object], base_role_name: str) -> tuple[bool, str]:
+def sync_user(payload: dict[str, object], base_role_name: str) -> tuple[str, str]:
     username = str(payload.get("username"))
     try:
         first_name = str(payload.get("first_name"))
@@ -520,9 +520,14 @@ def sync_user(payload: dict[str, object], base_role_name: str) -> tuple[bool, st
             email = email_template.replace("<usuario>", username)
             print(f"Email inválido para usuário '{username}' - usando padrão: {email}", file=sys.stderr)
 
-        roles = [ensure_role(base_role_name, role) for role in payload.get("roles", [])]
+        role_names = [
+          role_name
+          for role_name in payload.get("roles", [])
+          if isinstance(role_name, str) and role_name and role_name != base_role_name
+        ]
+        roles = [ensure_role(base_role_name, role_name) for role_name in role_names]
         if not roles:
-            return False, username
+          return "existing", username
 
         user = security_manager.find_user(username=username)
         if user is None:
@@ -538,17 +543,31 @@ def sync_user(payload: dict[str, object], base_role_name: str) -> tuple[bool, st
             # add_user pode retornar False em caso de erro
             if not user:
                 print(f"Falha ao criar usuário '{username}' - add_user retornou False", file=sys.stderr)
-                return False, username
+                return "failed", username
 
             user.roles = roles
             db.session.add(user)
-            return True, username
+            return "created", username
 
-        return False, username
+        # Usuário já existe: manter dados pessoais e alinhar roles exatamente ao AD.
+        role_names_from_ad = {role.name for role in roles}
+        current_role_names = {role.name for role in user.roles}
+
+        user.first_name = first_name
+        user.last_name = last_name
+        user.email = email
+
+        if current_role_names != role_names_from_ad:
+            user.roles = roles
+            db.session.add(user)
+            return "updated", username
+
+        db.session.add(user)
+        return "existing", username
     except Exception as e:  # noqa: BLE001
         print(f"Erro ao criar/sincronizar usuário '{username}': {e}", file=sys.stderr)
         db.session.rollback()
-        return False, f"{username}:{e}"
+        return "failed", f"{username}:{e}"
 
 
 def main(base_role_name: str) -> None:
@@ -559,25 +578,29 @@ def main(base_role_name: str) -> None:
     app = create_app()
     with app.app_context():
         created_count = 0
+        updated_count = 0
         existing_count = 0
         failed_count = 0
         failed_items: list[str] = []
         for user_payload in payload:
             if isinstance(user_payload, dict):
-                was_created, username = sync_user(user_payload, base_role_name)
-                if was_created:
+                status, username = sync_user(user_payload, base_role_name)
+                if status == "created":
                     print(f"Usuário criado: {username}", file=sys.stderr)
                     created_count += 1
+                elif status == "updated":
+                    print(f"Usuário atualizado (roles sincronizadas): {username}", file=sys.stderr)
+                    updated_count += 1
+                elif status == "failed":
+                    failed_count += 1
+                    failed_items.append(username)
+                    print(f"Falha ao sincronizar usuário: {username}", file=sys.stderr)
                 else:
-                    if ":" in username:
-                        failed_count += 1
-                        failed_items.append(username)
-                        print(f"Falha ao sincronizar usuário: {username}", file=sys.stderr)
-                    else:
-                        print(f"Usuário já existe - mantendo inalterado: {username}", file=sys.stderr)
-                        existing_count += 1
+                    print(f"Usuário já sincronizado (sem mudanças): {username}", file=sys.stderr)
+                    existing_count += 1
         db.session.commit()
         print(f"Usuários criados: {created_count}", file=sys.stderr)
+        print(f"Usuários atualizados: {updated_count}", file=sys.stderr)
         print(f"Usuários existentes: {existing_count}", file=sys.stderr)
         print(f"Usuários com falha: {failed_count}", file=sys.stderr)
         print(
@@ -586,6 +609,7 @@ def main(base_role_name: str) -> None:
                 {
                     "total": len(payload),
                     "created": created_count,
+                    "updated": updated_count,
                     "existing": existing_count,
                     "failed": failed_count,
                     "failed_items": failed_items,
