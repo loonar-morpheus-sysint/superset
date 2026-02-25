@@ -272,25 +272,55 @@ done
 
 say_ok "Todas as dependências verificadas."
 
-# ─── 1) Login via API JWT (provider=db obrigatório) ───────────────
-say_action "Autenticando no Superset via API (provider=db)..."
+# ─── 1) Login via formulário customizado (provider=database) ──────
+say_action "Autenticando no Superset via formulário customizado (provider=database)..."
 
-# Sempre autenticar contra o banco de usuários interno do Superset,
-# independente de SUPERSET_LOGIN_FORM_TYPE definido no .env.
-AUTH_PROVIDER="db"
+AUTH_PROVIDER="database"
+COOKIE_JAR=$(mktemp)
+trap 'rm -f "$COOKIE_JAR" 2>/dev/null' EXIT
 
-# Obter access_token JWT para todas as chamadas da API.
-if ! LOGIN_RESP="$(curl_run -s -X POST "${SUPERSET_URL}/api/v1/security/login" \
-	-H "Content-Type: application/json" \
-	-d "{\"username\":\"${SUPERSET_USER}\",\"password\":\"${SUPERSET_PASS}\",\"provider\":\"${AUTH_PROVIDER}\",\"refresh\":true}")"; then
-	say_err "Falha ao autenticar na API (JWT)."
+# 1a) Obter CSRF token do formulário de login
+if ! FORM_CSRF="$(curl_run -s -c "$COOKIE_JAR" "${SUPERSET_URL}/login/" \
+	| grep -oP 'value="\K[^"]{20,}')"; then
+	say_err "Falha ao acessar ${SUPERSET_URL}/login/ (verifique SUPERSET_HOST)."
 	exit 1
 fi
 
-TOKEN="$(echo "$LOGIN_RESP" | jq -r '.access_token // empty')"
+if [[ -z "$FORM_CSRF" ]]; then
+	say_err "Não foi possível obter CSRF token da página de login."
+	exit 1
+fi
 
-if [[ -z "$TOKEN" ]]; then
-	say_err "Falha na autenticação JWT com provider '${AUTH_PROVIDER}'. Resposta: ${LOGIN_RESP}"
+# 1b) Login via formulário, forçando banco interno (igual à UI customizada)
+if ! LOGIN_CODE="$(curl_run -s -c "$COOKIE_JAR" -b "$COOKIE_JAR" \
+	-w "%{http_code}" -o /dev/null \
+	-X POST "${SUPERSET_URL}/login/" \
+	-H "Content-Type: application/x-www-form-urlencoded" \
+	-H "Referer: ${SUPERSET_URL}/login/" \
+	--data-urlencode "csrf_token=${FORM_CSRF}" \
+	--data-urlencode "username=${SUPERSET_USER}" \
+	--data-urlencode "password=${SUPERSET_PASS}" \
+	--data-urlencode "auth_provider=${AUTH_PROVIDER}")"; then
+	say_err "Falha no POST de login (verifique conexão e credenciais)."
+	exit 1
+fi
+
+# 302 redirect = login OK
+if [[ "$LOGIN_CODE" != "302" && ("$LOGIN_CODE" -lt 200 || "$LOGIN_CODE" -ge 400) ]]; then
+	say_err "Falha no login via formulário (HTTP ${LOGIN_CODE})."
+	exit 1
+fi
+
+# 1c) Obter CSRF token da API para POST/PUT autenticados por sessão
+if ! API_CSRF="$(curl_run -s -b "$COOKIE_JAR" -c "$COOKIE_JAR" \
+	"${SUPERSET_URL}/api/v1/security/csrf_token/" \
+	| jq -r '.result // empty')"; then
+	say_err "Falha ao obter CSRF token da API."
+	exit 1
+fi
+
+if [[ -z "$API_CSRF" ]]; then
+	say_err "Não foi possível obter CSRF token da API."
 	exit 1
 fi
 
@@ -301,11 +331,11 @@ say_action "Exportando dashboard modelo ${DASHBOARD_ID} (template único)..."
 
 TEMPLATE_DIR=$(mktemp -d)
 TEMPLATE_ZIP="${TEMPLATE_DIR}/dashboard_template_${DASHBOARD_ID}.zip"
-trap 'rm -rf "$TEMPLATE_DIR" 2>/dev/null' EXIT
+trap 'rm -rf "$COOKIE_JAR" "$TEMPLATE_DIR" 2>/dev/null' EXIT
 
 TEMPLATE_HTTP_CODE="$(curl_run -s -o "$TEMPLATE_ZIP" -w "%{http_code}" \
 	-X GET "${SUPERSET_URL}/api/v1/dashboard/export/?q=%5B${DASHBOARD_ID}%5D" \
-	-H "Authorization: Bearer ${TOKEN}")"
+	-b "$COOKIE_JAR")"
 
 if [[ "$TEMPLATE_HTTP_CODE" -lt 200 || "$TEMPLATE_HTTP_CODE" -ge 300 ]]; then
 	say_err "Falha ao exportar dashboard modelo (HTTP ${TEMPLATE_HTTP_CODE})."
@@ -318,6 +348,13 @@ if ! unzip -t "$TEMPLATE_ZIP" >/dev/null 2>&1; then
 fi
 
 say_ok "Template exportado com sucesso."
+
+# ─── Função auxiliar: renovar CSRF token ─────────────────────────
+refresh_csrf() {
+	API_CSRF="$(curl_run -s -b "$COOKIE_JAR" -c "$COOKIE_JAR" \
+		"${SUPERSET_URL}/api/v1/security/csrf_token/" \
+		| jq -r '.result // empty')"
+}
 
 # ─── Função auxiliar: ajustar filtro "Cliente" no YAML ───────────
 update_cliente_filter() {
@@ -465,11 +502,14 @@ clone_dashboard_for() {
 
 	# Importar
 	say_action "[${dash_name}] Importando clone..."
+	refresh_csrf
 
 	local import_resp
 	import_resp="$(curl_run -s -w "\n%{http_code}" \
 		-X POST "${SUPERSET_URL}/api/v1/dashboard/import/" \
-		-H "Authorization: Bearer ${TOKEN}" \
+		-b "$COOKIE_JAR" \
+		-H "X-CSRFToken: ${API_CSRF}" \
+		-H "Referer: ${SUPERSET_URL}/" \
 		-F "formData=@${import_zip}" \
 		-F "overwrite=false")"
 
@@ -493,7 +533,7 @@ clone_dashboard_for() {
 	local dash_list
 	dash_list="$(curl_run -s \
 		"${SUPERSET_URL}/api/v1/dashboard/?q=(order_column:changed_on_delta_humanized,order_direction:desc,page_size:5)" \
-		-H "Authorization: Bearer ${TOKEN}")"
+		-b "$COOKIE_JAR")"
 
 	local new_id=""
 	if [[ -n "${new_uuid:-}" ]]; then
@@ -513,11 +553,14 @@ clone_dashboard_for() {
 
 	# Renomear
 	say_action "[${dash_name}] Renomeando para '${dash_name}'..."
+	refresh_csrf
 
 	local rename_resp
 	rename_resp="$(curl_run -s -o /dev/null -w "%{http_code}" \
 		-X PUT "${SUPERSET_URL}/api/v1/dashboard/${new_id}" \
-		-H "Authorization: Bearer ${TOKEN}" \
+		-b "$COOKIE_JAR" \
+		-H "X-CSRFToken: ${API_CSRF}" \
+		-H "Referer: ${SUPERSET_URL}/" \
 		-H "Content-Type: application/json" \
 		-d "{\"dashboard_title\":\"${dash_name}\"}")"
 
@@ -530,11 +573,14 @@ clone_dashboard_for() {
 
 	# Aplicar role
 	say_action "[${dash_name}] Aplicando role '${role_name}' (ID: ${role_id})..."
+	refresh_csrf
 
 	local role_resp
 	role_resp="$(curl_run -s -o /dev/null -w "%{http_code}" \
 		-X PUT "${SUPERSET_URL}/api/v1/dashboard/${new_id}" \
-		-H "Authorization: Bearer ${TOKEN}" \
+		-b "$COOKIE_JAR" \
+		-H "X-CSRFToken: ${API_CSRF}" \
+		-H "Referer: ${SUPERSET_URL}/" \
 		-H "Content-Type: application/json" \
 		-d "{\"roles\":[${role_id}]}")"
 
@@ -557,7 +603,7 @@ ROLES_PAGE_SIZE=100
 while true; do
 	PAGE_RESP="$(curl_run -s \
 		"${SUPERSET_URL}/api/v1/security/roles/?q=(page:${ROLES_PAGE},page_size:${ROLES_PAGE_SIZE})" \
-		-H "Authorization: Bearer ${TOKEN}")"
+		-b "$COOKIE_JAR")"
 
 	PAGE_COUNT="$(echo "$PAGE_RESP" | jq '.result | length')"
 	ALL_ROLES_JSON="$(echo "$ALL_ROLES_JSON" "$PAGE_RESP" | jq -s '.[0] + (.[1].result // [])')"
@@ -597,7 +643,7 @@ DASH_PAGE_SIZE=100
 while true; do
 	PAGE_RESP="$(curl_run -s \
 		"${SUPERSET_URL}/api/v1/dashboard/?q=(page:${DASH_PAGE},page_size:${DASH_PAGE_SIZE})" \
-		-H "Authorization: Bearer ${TOKEN}")"
+		-b "$COOKIE_JAR")"
 
 	PAGE_COUNT="$(echo "$PAGE_RESP" | jq '.result | length')"
 	ALL_DASH_JSON="$(echo "$ALL_DASH_JSON" "$PAGE_RESP" | jq -s '.[0] + (.[1].result // [])')"
