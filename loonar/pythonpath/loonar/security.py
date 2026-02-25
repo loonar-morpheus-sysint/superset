@@ -73,8 +73,9 @@ class LoonarAuthDBView(AuthDBView):
             login_form_type = os.getenv("SUPERSET_LOGIN_FORM_TYPE", "ldap").strip().lower()
 
         locale = str(get_locale() or "")
+        is_pt = locale.lower().startswith("pt")
         ldap_profile_label = (
-            "Perfil do usuário" if locale.lower().startswith("pt") else "User Profile"
+            "Perfil do usuário" if is_pt else "User Profile"
         )
 
         return self.render_template(
@@ -84,6 +85,7 @@ class LoonarAuthDBView(AuthDBView):
             ldap_login_enabled=current_app.config.get("AUTH_TYPE") == AUTH_LDAP,
             login_form_type=login_form_type,
             ldap_profile_label=ldap_profile_label,
+            is_pt=is_pt,
             appbuilder=self.appbuilder,
         )
 

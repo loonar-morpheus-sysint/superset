@@ -112,7 +112,7 @@
                   data-hidden-reason="{% if login_form_type != 'superset' and login_form_type != 'db' %}hidden-when-not-superset{% else %}visible{% endif %}"
                   {% if login_form_type != 'superset' and login_form_type != 'db' %}style="display: none;"{% else %}style="margin-top: 16px;"{% endif %}
                 >
-                {% if get_locale().lower().startswith('pt') %}
+                {% if is_pt %}
                   Entrar com Banco de Dados Superset
                 {% else %}
                   {{ _("Sign in with") }} {{ _("Superset Database") }}
@@ -124,7 +124,7 @@
                   style="margin-top: 8px;"
                   data-auth-provider="ldap"
                 >
-                {% if get_locale().lower().startswith('pt') %}
+                {% if is_pt %}
                   Entrar
                 {% else %}
                   {{ _("Sign in") }}
