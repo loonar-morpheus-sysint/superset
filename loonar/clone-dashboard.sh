@@ -702,7 +702,7 @@ while IFS= read -r role_line; do
 	fi
 
 	# Remover sufixo _CONTROLE ou -CONTROLE do nome da role
-	base_name="$(echo "$role_name" | sed -E 's/[_-]'"${ROLE_SUFFIX}"'$/' )"
+	base_name="$(echo "$role_name" | sed -E "s/[_-]${ROLE_SUFFIX}$//" )"
 
 	# Nome esperado do dashboard
 	expected_dash="${DASHBOARD_PREFIX}_${base_name}"
