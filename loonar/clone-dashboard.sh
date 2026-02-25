@@ -97,65 +97,97 @@ with open(file_path, 'w') as f:
 
 # --- Lógica Principal ---
 
-DASHBOARD_ID=""
-NEW_DASHBOARD_NAME=""
+# 1. Defaults
 UPDATE_DEPS=true
+INTERACTIVE_MODE=true
+POSITIONAL_ARGS=()
 
+# 2. Argument Parsing
 while [[ $# -gt 0 ]]; do
-  key="$1"
-
-  case $key in
+  case "$1" in
     --no-update)
       UPDATE_DEPS=false
-      shift # past argument
+      shift
+      ;;
+    --no-interactive)
+      INTERACTIVE_MODE=false
+      shift
+      ;;
+    -*)
+      # Ignorando flags desconhecidas para manter compatibilidade
+      shift
       ;;
     *)
-      if [ -z "$DASHBOARD_ID" ]; then
-        DASHBOARD_ID="$1"
-      elif [ -z "$NEW_DASHBOARD_NAME" ]; then
-        NEW_DASHBOARD_NAME="$1"
-      fi
-      shift # past argument
+      POSITIONAL_ARGS+=("$1")
+      shift
       ;;
   esac
 done
 
-if [ -z "$DASHBOARD_ID" ] || [ -z "$NEW_DASHBOARD_NAME" ]; then
-    echo "USO: $0 <ID_DO_DASHBOARD> <NOME_DO_NOVO_DASHBOARD> [--no-update]"
-    exit 1
-fi
-
+# --- Configuração do Ambiente Superset ---
 : "${SUPERSET_DOMAIN:=http://localhost:8088}"
 : "${SUPERSET_USER:=admin}"
 : "${SUPERSET_PASSWORD:=admin}"
-
 export SUPERSET_BASE_URL="$SUPERSET_DOMAIN"
 
-echo "Clone do Dashboard"
-echo "=================="
-echo
-echo "Dashboard ID: $DASHBOARD_ID"
-echo "Novo Nome:    $NEW_DASHBOARD_NAME"
-echo "Superset URL: $SUPERSET_DOMAIN"
-echo "Atualizar Deps: $UPDATE_DEPS"
-echo
+# --- Execução ---
 
-check_deps
-login
+# 3. Control Flow: Decide o modo de execução
+if [ "${#POSITIONAL_ARGS[@]}" -ge 2 ]; then
+    # Modo Explícito: Clona um dashboard com base nos argumentos fornecidos
+    check_deps
+    login
 
-export_dashboard "$DASHBOARD_ID"
-EXPORTED_FILE=$(find_exported_file)
+    DASHBOARD_ID="${POSITIONAL_ARGS[0]}"
+    NEW_DASHBOARD_NAME="${POSITIONAL_ARGS[1]}"
 
-if [ ! -f "$EXPORTED_FILE" ]; then
-    echo "Erro: Arquivo exportado não encontrado."
+    echo "Clone do Dashboard (Modo Explícito)"
+    echo "=================================="
+    echo
+    echo "Dashboard ID: $DASHBOARD_ID"
+    echo "Novo Nome:    $NEW_DASHBOARD_NAME"
+    echo "Superset URL: $SUPERSET_DOMAIN"
+    echo
+
+    export_dashboard "$DASHBOARD_ID"
+    EXPORTED_FILE=$(find_exported_file)
+
+    if [ ! -f "$EXPORTED_FILE" ]; then
+        echo "Erro: Arquivo exportado não encontrado."
+        exit 1
+    fi
+
+    echo "Arquivo exportado: $EXPORTED_FILE"
+
+    change_dashboard_title "$EXPORTED_FILE" "$NEW_DASHBOARD_NAME"
+    import_dashboard "$EXPORTED_FILE"
+
+    echo
+    echo "Dashboard clonado com sucesso!"
+    echo "Novo dashboard '$NEW_DASHBOARD_NAME' criado."
+
+elif [ "$INTERACTIVE_MODE" = false ]; then
+    # Modo não interativo (em lote): Lógica de clonagem para roles
+    check_deps
+    login
+
+    echo "Clone do Dashboard (Modo em Lote --no-interactive)"
+    echo "=================================================="
+
+    # ----- INÍCIO DA LÓGICA DE CLONAGEM EM LOTE -----
+    # A lógica original para ler o .env e iterar sobre as roles
+    # deve ser inserida aqui.
+    echo "ERRO: A lógica de clonagem em lote (modo não interativo) não está implementada." >&2
+    echo "Por favor, insira a lógica para ler o .env e clonar para as roles do Superset." >&2
+    exit 1
+    # ----- FIM DA LÓGICA DE CLONAGEM EM LOTE -----
+else
+    # Modo Interativo (sem argumentos e sem --no-interactive)
+    # ou número insuficiente de argumentos posicionais.
+    echo "USO:"
+    echo "  Modo Explícito: $0 <ID_DO_DASHBOARD> <NOME_DO_NOVO_DASHBOARD> [--no-update] [--no-interactive]"
+    echo "  Modo em Lote:   $0 --no-interactive [--no-update]"
+    echo
+    echo "ERRO: Argumentos insuficientes ou modo interativo não implementado." >&2
     exit 1
 fi
-
-echo "Arquivo exportado: $EXPORTED_FILE"
-
-change_dashboard_title "$EXPORTED_FILE" "$NEW_DASHBOARD_NAME"
-import_dashboard "$EXPORTED_FILE"
-
-echo
-echo "Dashboard clonado com sucesso!"
-echo "Novo dashboard '$NEW_DASHBOARD_NAME' criado."
