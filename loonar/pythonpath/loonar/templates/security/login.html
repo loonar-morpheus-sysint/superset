@@ -110,9 +110,13 @@
                   class="btn btn-primary btn-block"
                   data-auth-provider="database"
                   data-hidden-reason="{% if login_form_type != 'superset' and login_form_type != 'db' %}hidden-when-not-superset{% else %}visible{% endif %}"
-                  {% if login_form_type != 'superset' and login_form_type != 'db' %}style="display: none;"{% endif %}
+                  {% if login_form_type != 'superset' and login_form_type != 'db' %}style="display: none;"{% else %}style="margin-top: 16px;"{% endif %}
                 >
-                {{ _("Sign in with") }} {{ _("Superset Database") }}
+                {% if get_locale().lower().startswith('pt') %}
+                  Entrar com Banco de Dados Superset
+                {% else %}
+                  {{ _("Sign in with") }} {{ _("Superset Database") }}
+                {% endif %}
                 </button>
                 <button
                   type="submit"
@@ -120,7 +124,11 @@
                   style="margin-top: 8px;"
                   data-auth-provider="ldap"
                 >
-                {{ _("Sign in") }}
+                {% if get_locale().lower().startswith('pt') %}
+                  Entrar
+                {% else %}
+                  {{ _("Sign in") }}
+                {% endif %}
                 </button>
               </div>
             </div>
