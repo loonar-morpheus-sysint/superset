@@ -679,7 +679,9 @@ while IFS= read -r role_line; do
 	# Verificar se role está na lista de ignorados (case insensitive, ignora espaços)
 	ignore_this_role=false
 	for ignore in "${IGNORE_ROLES[@]}"; do
-		ignore_trimmed="$(echo "$ignore" | sed 's/^ *//;s/ *$//')"
+		# Remove espaços do início e fim (trim) usando bash puro
+		ignore_trimmed="${ignore#"${ignore%%[![:space:]]*}"}"
+		ignore_trimmed="${ignore_trimmed%"${ignore_trimmed##*[![:space:]]}"}"
 		if [[ "${role_name,,}" == "${ignore_trimmed,,}" ]]; then
 			ignore_this_role=true
 			break
