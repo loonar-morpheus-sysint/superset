@@ -109,8 +109,8 @@
                   type="submit"
                   class="btn btn-primary btn-block"
                   data-auth-provider="database"
-                  data-hidden-reason="{% if login_form_type != 'superset' %}hidden-when-not-superset{% else %}visible{% endif %}"
-                  {% if login_form_type != 'superset' %}style="display: none;"{% endif %}
+                  data-hidden-reason="{% if login_form_type != 'superset' and login_form_type != 'db' %}hidden-when-not-superset{% else %}visible{% endif %}"
+                  {% if login_form_type != 'superset' and login_form_type != 'db' %}style="display: none;"{% endif %}
                 >
                 {{ _("Sign in with") }} {{ _("Superset Database") }}
                 </button>

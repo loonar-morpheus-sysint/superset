@@ -153,3 +153,5 @@ backup
 *.bkp
 
 **/.venv/
+loonar/.env-hom
+loonar/.env-hom
