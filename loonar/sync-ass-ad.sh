@@ -498,12 +498,12 @@ from superset.extensions import db, security_manager
 def ensure_role(base_role_name: str, role_name: str):
     role = security_manager.find_role(role_name)
     if role is None:
-    base_role = security_manager.find_role(base_role_name)
-    if base_role is None:
-      raise SystemExit(f"Role base não encontrada: {base_role_name}")
+        base_role = security_manager.find_role(base_role_name)
+        if base_role is None:
+            raise SystemExit(f"Role base não encontrada: {base_role_name}")
         role = security_manager.add_role(role_name)
-    role.permissions = list(base_role.permissions)
-    db.session.add(role)
+        role.permissions = list(base_role.permissions)
+        db.session.add(role)
     return role
 
 
