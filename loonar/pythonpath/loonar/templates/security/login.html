@@ -118,20 +118,20 @@
                   {{ _("Sign in with") }} {{ _("Superset Database") }}
                 {% endif %}
                 </button>
-                <button
-                  type="submit"
-                  class="btn btn-primary btn-block"
-                  style="margin-top: 8px;"
-                  data-auth-provider="ldap"
-                >
                 {% if login_form_type != 'db' and login_form_type != 'superset' %}
+                  <button
+                    type="submit"
+                    class="btn btn-primary btn-block"
+                    style="margin-top: 8px;"
+                    data-auth-provider="ldap"
+                  >
                   {% if is_pt %}
                     Entrar
                   {% else %}
                     {{ _("Sign in") }}
                   {% endif %}
+                  </button>
                 {% endif %}
-                </button>
               </div>
             </div>
 
