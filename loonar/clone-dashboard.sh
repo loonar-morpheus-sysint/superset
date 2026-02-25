@@ -665,6 +665,8 @@ IGNORED_ROLES=()            # array de roles ignoradas
 
 # Obter lista de roles a ignorar (separadas por vírgula)
 IGNORE_ROLES_RAW="$(get_env_value "LOONAR_CLONE_IGNORE_ROLES")"
+# Remove aspas duplas/simples do valor
+IGNORE_ROLES_RAW="$(echo "$IGNORE_ROLES_RAW" | sed "s/^['\"]//;s/['\"]$//")"
 IFS=',' read -r -a IGNORE_ROLES <<< "${IGNORE_ROLES_RAW}"
 
 while IFS= read -r role_line; do
