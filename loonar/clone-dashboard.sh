@@ -661,13 +661,34 @@ say_ok "${DASH_TOTAL} dashboard(s) existente(s) encontrado(s)."
 say_action "Verificando quais dashboards precisam ser criados..."
 
 DASHBOARDS_TO_CREATE=()     # array de "dash_name|role_name|role_id"
+IGNORED_ROLES=()            # array de roles ignoradas
+
+# Obter lista de roles a ignorar (separadas por vírgula)
+IGNORE_ROLES_RAW="$(get_env_value "LOONAR_CLONE_IGNORE_ROLES")"
+IFS=',' read -r -a IGNORE_ROLES <<< "${IGNORE_ROLES_RAW}"
 
 while IFS= read -r role_line; do
 	role_name="$(echo "$role_line" | jq -r '.name')"
 	role_id="$(echo "$role_line" | jq -r '.id')"
 
+	# Verificar se role está na lista de ignorados (case insensitive, ignora espaços)
+	ignore_this_role=false
+	for ignore in "${IGNORE_ROLES[@]}"; do
+		ignore_trimmed="$(echo "$ignore" | sed 's/^ *//;s/ *$//')"
+		if [[ "${role_name,,}" == "${ignore_trimmed,,}" ]]; then
+			ignore_this_role=true
+			break
+		fi
+	done
+
+	if $ignore_this_role; then
+		IGNORED_ROLES+=("$role_name")
+		say_ok "Role '${role_name}' está na lista de ignorados → não será processada"
+		continue
+	fi
+
 	# Remover sufixo _CONTROLE ou -CONTROLE do nome da role
-	base_name="$(echo "$role_name" | sed -E 's/[_-]'"${ROLE_SUFFIX}"'$//' )"
+	base_name="$(echo "$role_name" | sed -E 's/[_-]'"${ROLE_SUFFIX}"'$/' )"
 
 	# Nome esperado do dashboard
 	expected_dash="${DASHBOARD_PREFIX}_${base_name}"
@@ -692,6 +713,7 @@ if [[ "$CREATE_COUNT" -eq 0 ]]; then
 	exit 0
 fi
 
+
 say_info "Resumo: ${CREATE_COUNT} dashboard(s) a ser(em) criado(s):"
 
 for entry in "${DASHBOARDS_TO_CREATE[@]}"; do
@@ -701,6 +723,16 @@ for entry in "${DASHBOARDS_TO_CREATE[@]}"; do
 		"${COLOR_YELLOW}" "$role_name" "${COLOR_RESET}" "$role_id"
 done
 printf "\n"
+
+# Exibe resumo das roles ignoradas, se houver
+IGNORED_COUNT=${#IGNORED_ROLES[@]}
+if [[ "$IGNORED_COUNT" -gt 0 ]]; then
+	say_info "Roles ignoradas (${IGNORED_COUNT}):"
+	for ignored in "${IGNORED_ROLES[@]}"; do
+		printf "   ⏭️  %b%s%b\n" "${COLOR_YELLOW}" "$ignored" "${COLOR_RESET}"
+	done
+	printf "\n"
+fi
 
 if ! confirm_continue "Deseja prosseguir com a criação dos ${CREATE_COUNT} dashboard(s) acima?"; then
 	say_warn "Operação cancelada pelo usuário."
