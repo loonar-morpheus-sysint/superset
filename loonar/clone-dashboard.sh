@@ -662,9 +662,9 @@ say_ok "${DASH_TOTAL} dashboard(s) existente(s) encontrado(s)."
 trim_spaces() {
 	local var="$1"
 	# Remove espaços do início
-	var="${var##*[![:space:]]}"
+	var="${var#"${var%%[![:space:]]*}"}"
 	# Remove espaços do fim
-	var="${var%%*[![:space:]]}"
+	var="${var%"${var##*[![:space:]]}"}"
 	echo "$var"
 }
 say_action "Verificando quais dashboards precisam ser criados..."
@@ -689,7 +689,7 @@ while IFS= read -r role_line; do
 	ignore_this_role=false
 	for ignore in "${IGNORE_ROLES[@]}"; do
 		ignore_trimmed="$(trim_spaces "$ignore")"
-		if [[ "${role_name,,}" == "${ignore_trimmed,,}" ]]; then
+		if [[ -n "$ignore_trimmed" && "${role_name,,}" == "${ignore_trimmed,,}" ]]; then
 			ignore_this_role=true
 			break
 		fi
