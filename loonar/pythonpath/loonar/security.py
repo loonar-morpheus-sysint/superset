@@ -65,7 +65,13 @@ class LoonarAuthDBView(AuthDBView):
             if result:
                 return result
 
-        login_form_type = os.getenv("SUPERSET_LOGIN_FORM_TYPE", "ldap").strip().lower()
+        # Prioriza querystring, depois env var, depois default
+        login_form_type = request.args.get("login_form_type")
+        if login_form_type:
+            login_form_type = login_form_type.strip().lower()
+        else:
+            login_form_type = os.getenv("SUPERSET_LOGIN_FORM_TYPE", "ldap").strip().lower()
+
         locale = str(get_locale() or "")
         ldap_profile_label = (
             "Perfil do usuário" if locale.lower().startswith("pt") else "User Profile"
