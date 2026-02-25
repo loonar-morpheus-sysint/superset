@@ -658,6 +658,15 @@ DASH_TOTAL="$(echo "$ALL_DASH_JSON" | jq 'length')"
 say_ok "${DASH_TOTAL} dashboard(s) existente(s) encontrado(s)."
 
 # ─── 4) Determinar quais dashboards precisam ser criados ─────────
+# Função para trim de espaços (início e fim) usando bash puro
+trim_spaces() {
+	local var="$1"
+	# Remove espaços do início
+	var="${var##*[![:space:]]}"
+	# Remove espaços do fim
+	var="${var%%*[![:space:]]}"
+	echo "$var"
+}
 say_action "Verificando quais dashboards precisam ser criados..."
 
 DASHBOARDS_TO_CREATE=()     # array de "dash_name|role_name|role_id"
@@ -679,9 +688,7 @@ while IFS= read -r role_line; do
 	# Verificar se role está na lista de ignorados (case insensitive, ignora espaços)
 	ignore_this_role=false
 	for ignore in "${IGNORE_ROLES[@]}"; do
-		# Remove espaços do início e fim (trim) usando bash puro
-		ignore_trimmed="${ignore#"${ignore%%[![:space:]]*}"}"
-		ignore_trimmed="${ignore_trimmed%"${ignore_trimmed##*[![:space:]]}"}"
+		ignore_trimmed="$(trim_spaces "$ignore")"
 		if [[ "${role_name,,}" == "${ignore_trimmed,,}" ]]; then
 			ignore_this_role=true
 			break
