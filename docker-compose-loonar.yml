@@ -66,6 +66,12 @@ x-extra-hosts: &superset-extra-hosts
   - "host.docker.internal:host-gateway"
   - "${SUPERSET_HOST:-superset.local}:host-gateway"
 
+x-default-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "1"
+
 services:
 # Use sempre imagens oficiais e tags de versão específicas para produção
   redis:
@@ -85,6 +91,7 @@ services:
       timeout: 10s
       retries: 5
       start_period: 10s
+    logging: *default-logging
     networks:
       - superset
 
@@ -103,6 +110,7 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+    logging: *default-logging
     networks:
       - superset
 
@@ -132,6 +140,7 @@ services:
       timeout: 15s
       retries: 3
       start_period: 60s
+    logging: *default-logging
     networks:
       - superset
 
@@ -162,6 +171,7 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
+    logging: *default-logging
     networks:
       - superset
 
@@ -189,6 +199,7 @@ services:
       - superset
     healthcheck:
       disable: true
+    logging: *default-logging
 
   superset_init:
     env_file: *superset-env
@@ -216,6 +227,7 @@ services:
       - superset
     healthcheck:
       disable: true
+    logging: *default-logging
 
   nginx:
     build:
@@ -241,6 +253,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+    logging: *default-logging
     networks:
       - superset
 
