@@ -1,407 +1,280 @@
-#!/usr/bin/bash
-
+#!/usr/bin/env bash
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
 # this work for additional information regarding copyright ownership.
-# The ASF licenses this file to you under the Apache License, Version 2.0
+# The ASF licenses this file to You under the Apache License, Version 2.0
 # (the "License"); you may not use this file except in compliance with
 # the License.  You may obtain a copy of the License at
 #
-#   http://www.apache.org/licenses/LICENSE-2.0
+#    http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-#
 
-# =============================
-# Script de Teste - Integração LDAP/Active Directory com Superset
-# =============================
-# Este script valida a configuração LDAP de duas formas:
-# 1. Via ldapsearch (testa conectividade e busca de usuários/grupos)
-# 2. Via API REST do Superset (testa autenticação real)
+set -euo pipefail
 
-# =============================
-# CORES PARA OUTPUT
-# =============================
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+VERBOSE=0
 
-# =============================
-# FUNÇÕES AUXILIARES
-# =============================
-
-log_info() {
-    echo -e "${BLUE}[INFO]${NC} $1"
+usage() {
+	echo "Uso: $(basename "$0") [--verbose|-v] [--help|-h]"
+	echo ""
+	echo "Opções:"
+	echo "  -v, --verbose   Exibe logs detalhados e stderr do ldapsearch"
+	echo "  -h, --help      Exibe esta ajuda"
 }
 
-log_success() {
-    echo -e "${GREEN}[✓]${NC} $1"
+while [[ $# -gt 0 ]]; do
+	case "$1" in
+	-v|--verbose)
+		VERBOSE=1
+		shift
+		;;
+	-h|--help)
+		usage
+		exit 0
+		;;
+	*)
+		echo "❌ Opção inválida: $1"
+		usage
+		exit 1
+		;;
+	esac
+done
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ENV_FILE="${SCRIPT_DIR}/.env"
+
+if [[ ! -f "${ENV_FILE}" ]]; then
+	echo "❌ Arquivo .env não encontrado em: ${ENV_FILE}"
+	exit 1
+fi
+
+if ! command -v ldapsearch >/dev/null 2>&1; then
+	echo "❌ O comando 'ldapsearch' não está disponível. Instale ldap-utils/openldap-clients."
+	exit 1
+fi
+
+trim() {
+	local value="$1"
+	value="${value#${value%%[![:space:]]*}}"
+	value="${value%${value##*[![:space:]]}}"
+	echo "${value}"
 }
 
-log_error() {
-    echo -e "${RED}[✗]${NC} $1"
+strip_wrapping_quotes() {
+	local value="$1"
+	value="$(trim "${value}")"
+	if [[ "${value}" =~ ^\'.*\'$ ]]; then
+		value="${value:1:${#value}-2}"
+	elif [[ "${value}" =~ ^\".*\"$ ]]; then
+		value="${value:1:${#value}-2}"
+	fi
+	echo "${value}"
 }
 
-log_warning() {
-    echo -e "${YELLOW}[!]${NC} $1"
+read_env_var() {
+	local key="$1"
+	local line
+	line="$(grep -E "^${key}=" "${ENV_FILE}" | tail -n1 || true)"
+
+	if [[ -z "${line}" ]]; then
+		echo ""
+		return 0
+	fi
+
+	strip_wrapping_quotes "${line#*=}"
 }
 
-separator() {
-    echo -e "\n${BLUE}========================================${NC}\n"
+parse_user_bases() {
+	local json_like="$1"
+	local compact
+	compact="$(echo "${json_like}" | tr -d '\n' | tr -d '\r')"
+
+	echo "${compact}" \
+		| sed -E 's/^\s*\{//; s/\}\s*$//' \
+		| tr ',' '\n' \
+		| sed -E 's/^\s*"[^"]+"\s*:\s*"([^"]+)"\s*$/\1/' \
+		| sed -E '/^\s*$/d'
 }
 
-# =============================
-# CARREGAR VARIÁVEIS DE AMBIENTE
-# =============================
-
-load_env() {
-    local env_file=""
-
-    if [ -f ".env" ]; then
-        env_file=".env"
-    else
-        log_error "Arquivo de configuração não encontrado (${PWD}/.env )"
-        exit 1
-    fi
-
-    # Carregar variáveis do arquivo .env com proteção contra caracteres especiais
-    set -a
-    # shellcheck disable=SC1090
-    source "$env_file" 2>/dev/null || true
-    set +a
-
-    log_success "Variáveis carregadas de $env_file"
-
-    # Validar variáveis obrigatórias
-    if [ -z "$LOONAR_LDAP_MODE" ]; then
-        log_error "LOONAR_LDAP_MODE não está definido"
-        exit 1
-    fi
-
-    if [ "$LOONAR_LDAP_MODE" = "real" ]; then
-        LDAP_SERVER="$LOONAR_LDAP_SERVER_REAL"
-        LDAP_BIND_DN="$LOONAR_LDAP_BIND_DN_REAL"
-        LDAP_BIND_PASSWORD="$LOONAR_LDAP_BIND_PASSWORD_REAL"
-        LDAP_USER_BASE="$LOONAR_LDAP_USER_BASE_REAL"
-        LDAP_GROUP_BASE="$LOONAR_LDAP_GROUP_BASE_REAL"
-    else
-        LDAP_SERVER="$LOONAR_LDAP_SERVER_MOCK"
-        LDAP_BIND_DN="$LOONAR_LDAP_BIND_DN_MOCK"
-        LDAP_BIND_PASSWORD="$LOONAR_LDAP_BIND_PASSWORD_MOCK"
-        LDAP_USER_BASE="$LOONAR_LDAP_USER_BASE_MOCK"
-        LDAP_GROUP_BASE="$LOONAR_LDAP_GROUP_BASE_MOCK"
-    fi
-
-    # Variáveis comuns (independem de mock/real)
-    LDAP_GROUP_FILTERTERM="$LOONAR_LDAP_GROUP_FILTERTERM"
-    LDAP_BASE_ROLE="$LOONAR_LDAP_BASE_ROLE"
-    LDAP_EMAIL_DOMAIN="$LOONAR_LDAP_EMAIL_DOMAIN"
+directory_base_from_dn() {
+	local dn="$1"
+	local base
+	base="$(echo "${dn}" | grep -oiE 'DC=[^,]+' | paste -sd, - || true)"
+	echo "${base}"
 }
 
-# =============================
-# 1. TESTE DE CONECTIVIDADE LDAP (ldapsearch)
-# =============================
+build_search_filter() {
+	local input="$1"
 
-test_ldap_connection() {
-    separator
-    log_info "Testando conectividade LDAP com ldapsearch..."
+	if [[ "${input}" =~ ^\(.*\)$ ]]; then
+		echo "${input}"
+		return 0
+	fi
 
-    if ! command -v ldapsearch &> /dev/null; then
-        log_warning "ldapsearch não está instalado. Execute: sudo apt-get install ldap-utils"
-        return 1
-    fi
+	if [[ "${input}" == *=* ]]; then
+		echo "(${input})"
+		return 0
+	fi
 
-    # Extrair servidor e porta
-    LDAP_HOST=$(echo "$LDAP_SERVER" | sed 's|ldap://||' | cut -d: -f1)
-    LDAP_PORT=$(echo "$LDAP_SERVER" | sed 's|ldap://||' | cut -d: -f2)
-    LDAP_PORT=${LDAP_PORT:-389}
-
-    log_info "Servidor: $LDAP_HOST"
-    log_info "Porta: $LDAP_PORT"
-    log_info "Bind DN: $LDAP_BIND_DN"
-
-    # Teste de bind
-    if ldapsearch -x \
-        -H "$LDAP_SERVER" \
-        -D "$LDAP_BIND_DN" \
-        -w "$LDAP_BIND_PASSWORD" \
-        -b "$LDAP_USER_BASE" \
-        "(objectClass=user)" \
-        sAMAccountName \
-        givenName \
-        sn \
-        mail 2>/dev/null | grep -q "numResponses"; then
-        log_success "Conexão LDAP bem-sucedida"
-        return 0
-    else
-        log_error "Falha na conexão LDAP"
-        return 1
-    fi
+	echo "(|(sAMAccountName=${input})(userPrincipalName=${input})(mail=${input})(cn=*${input}*))"
 }
 
-# =============================
-# 2. TESTE DE BUSCA DE USUÁRIOS
-# =============================
+run_ldap_search() {
+	local base_dn="$1"
+	local filter="$2"
 
-test_ldap_search_users() {
-    separator
-    log_info "Testando busca de usuários no LDAP..."
-
-    ldapsearch -x \
-        -H "$LDAP_SERVER" \
-        -D "$LDAP_BIND_DN" \
-        -w "$LDAP_BIND_PASSWORD" \
-        -b "$LDAP_USER_BASE" \
-        "(objectClass=user)" \
-        | head -50
+	if [[ "${VERBOSE}" -eq 1 ]]; then
+		echo "[DEBUG] ldapsearch -H ${LDAP_SERVER} -D ${LDAP_BIND_DN} -b ${base_dn} '${filter}'"
+		ldapsearch \
+			-x \
+			-H "${LDAP_SERVER}" \
+			-D "${LDAP_BIND_DN}" \
+			-w "${LDAP_BIND_PASSWORD}" \
+			-b "${base_dn}" \
+			"${filter}" \
+			dn cn sn givenName mail sAMAccountName userPrincipalName memberOf || true
+	else
+		ldapsearch \
+			-x \
+			-H "${LDAP_SERVER}" \
+			-D "${LDAP_BIND_DN}" \
+			-w "${LDAP_BIND_PASSWORD}" \
+			-b "${base_dn}" \
+			"${filter}" \
+			dn cn sn givenName mail sAMAccountName userPrincipalName memberOf 2>/dev/null || true
+	fi
 }
 
-# =============================
-# 3. TESTE DE BUSCA DE GRUPOS
-# =============================
+echo "=============================================="
+echo "🔎 Teste de busca de usuário no Active Directory"
+echo "=============================================="
+echo ""
+echo "Escolha a base para autenticar no LDAP:"
+echo "  1) Mock"
+echo "  2) Real"
 
-test_ldap_search_groups() {
-    separator
-    log_info "Testando busca de grupos Superset no LDAP..."
+while true; do
+	read -r -p "Opção [1/2]: " ENV_CHOICE
+	case "${ENV_CHOICE}" in
+		1)
+			LDAP_SERVER="$(read_env_var "LOONAR_LDAP_SERVER_MOCK")"
+			LDAP_BIND_DN="$(read_env_var "LOONAR_LDAP_BIND_DN_MOCK")"
+			LDAP_BIND_PASSWORD="$(read_env_var "LOONAR_LDAP_BIND_PASSWORD_MOCK")"
+			LDAP_USE_SSL="$(read_env_var "LOONAR_LDAP_USE_SSL_MOCK")"
+			break
+			;;
+		2)
+			LDAP_SERVER="$(read_env_var "LOONAR_LDAP_SERVER_REAL")"
+			LDAP_BIND_DN="$(read_env_var "LOONAR_LDAP_BIND_DN_REAL")"
+			LDAP_BIND_PASSWORD="$(read_env_var "LOONAR_LDAP_BIND_PASSWORD_REAL")"
+			LDAP_USE_SSL="$(read_env_var "LOONAR_LDAP_USE_SSL_REAL")"
+			break
+			;;
+		*)
+			echo "⚠️  Opção inválida. Digite 1 (Mock) ou 2 (Real)."
+			;;
+	esac
+done
 
-    local groups_output
-    groups_output=$(ldapsearch -x \
-        -H "$LDAP_SERVER" \
-        -D "$LDAP_BIND_DN" \
-        -w "$LDAP_BIND_PASSWORD" \
-        -b "$LDAP_GROUP_BASE" \
-        "(cn=superset_*)" \
-        cn \
-        member 2>/dev/null)
+if [[ -z "${LDAP_SERVER}" || -z "${LDAP_BIND_DN}" || -z "${LDAP_BIND_PASSWORD}" ]]; then
+	echo "❌ Parâmetros LDAP obrigatórios não encontrados no .env para a base selecionada."
+	exit 1
+fi
 
-    if echo "$groups_output" | grep -q "superset_"; then
-        log_success "Grupos Superset encontrados:"
-        echo "$groups_output" | grep "^cn: superset_"
-    else
-        log_warning "Nenhum grupo com prefixo 'superset_' encontrado"
-        log_info "Procurando todos os grupos (cn=*)..."
-        ldapsearch -x \
-            -H "$LDAP_SERVER" \
-            -D "$LDAP_BIND_DN" \
-            -w "$LDAP_BIND_PASSWORD" \
-            -b "$LDAP_GROUP_BASE" \
-            "(objectClass=group)" \
-            cn \
-            2>/dev/null | grep "^cn:" | head -20
-    fi
-}
+if [[ "${LDAP_USE_SSL,,}" == "true" && "${LDAP_SERVER}" =~ ^ldap:// ]]; then
+	LDAP_SERVER="ldaps://${LDAP_SERVER#ldap://}"
+fi
 
-# =============================
-# 4. TESTE DE CONFIGURAÇÃO DO SUPERSET
-# =============================
+if [[ "${VERBOSE}" -eq 1 ]]; then
+	echo "[DEBUG] Modo verbose ativado"
+	echo "[DEBUG] Servidor LDAP: ${LDAP_SERVER}"
+	echo "[DEBUG] Bind DN: ${LDAP_BIND_DN}"
+	echo "[DEBUG] LDAP_USE_SSL: ${LDAP_USE_SSL}"
+fi
 
-test_superset_config() {
-    separator
-    log_info "Verificando configuração do Superset..."
+USER_BASES_RAW="$(read_env_var "LOONAR_LDAP_USER_BASE_MOCK")"
+if [[ -z "${USER_BASES_RAW}" ]]; then
+	echo "❌ Variável LOONAR_LDAP_USER_BASE_MOCK não encontrada no .env."
+	exit 1
+fi
 
-    # Variáveis obrigatórias
-    if [ "$SUPERSET_LOGIN_FORM_TYPE" != "ldap" ]; then
-        log_error "SUPERSET_LOGIN_FORM_TYPE deve ser 'ldap', encontrado: $SUPERSET_LOGIN_FORM_TYPE"
-        return 1
-    fi
-    log_success "SUPERSET_LOGIN_FORM_TYPE = ldap"
+mapfile -t USER_BASES < <(parse_user_bases "${USER_BASES_RAW}")
+if [[ "${#USER_BASES[@]}" -eq 0 ]]; then
+	echo "❌ Não foi possível interpretar as OUs em LOONAR_LDAP_USER_BASE_MOCK."
+	exit 1
+fi
 
-    log_success "LOONAR_LDAP_MODE = $LOONAR_LDAP_MODE"
-    log_success "Servidor LDAP = $LDAP_SERVER"
-    log_success "Base de usuários = $LDAP_USER_BASE"
-    log_success "Base de grupos = $LDAP_GROUP_BASE"
-    log_success "Filtro de grupo = $LDAP_GROUP_FILTERTERM"
-    log_success "Role base = $LDAP_BASE_ROLE"
-    log_success "Domínio de e-mail = $LDAP_EMAIL_DOMAIN"
+read -r -p "Informe o usuário/filtro para pesquisa LDAP (ex: afarias ou sAMAccountName=afarias): " SEARCH_INPUT
+SEARCH_INPUT="$(trim "${SEARCH_INPUT}")"
 
-    return 0
-}
+if [[ -z "${SEARCH_INPUT}" ]]; then
+	echo "❌ Valor de pesquisa não pode ser vazio."
+	exit 1
+fi
 
-# =============================
-# 5. TESTE VIA API REST DO SUPERSET
-# =============================
+SEARCH_FILTER="$(build_search_filter "${SEARCH_INPUT}")"
 
-test_superset_login_api() {
-    separator
-    log_info "Testando autenticação via API REST do Superset..."
+echo ""
+echo "📌 Filtro utilizado: ${SEARCH_FILTER}"
+echo "📌 Busca inicial nas OUs da variável LOONAR_LDAP_USER_BASE_MOCK"
+echo ""
 
-    # Verificar se Superset está rodando
-    if ! curl -s http://localhost:8088/health > /dev/null 2>&1; then
-        log_error "Superset não está acessível em http://localhost:8088"
-        log_info "Verifique se os containers estão rodando:"
-        log_info "  docker-compose -f docker-compose-loonar.yml ps"
-        return 1
-    fi
-    log_success "Superset está acessível"
+FOUND=0
 
-    # Pedir credenciais para teste
-    read -p "Digite o usuário LDAP para teste: " TEST_USER
-    read -sp "Digite a senha: " TEST_PASSWORD
-    echo ""
+for base_dn in "${USER_BASES[@]}"; do
+	base_dn="$(trim "${base_dn}")"
+	[[ -z "${base_dn}" ]] && continue
 
-    # Tentar fazer login via API
-    LOGIN_RESPONSE=$(curl -s -X POST http://localhost:8088/api/v1/security/login \
-        -H "Content-Type: application/json" \
-        -d "{
-            \"username\": \"$TEST_USER\",
-            \"password\": \"$TEST_PASSWORD\",
-            \"provider\": \"db\"
-        }")
+	echo "➡️  Pesquisando em: ${base_dn}"
+	result="$(run_ldap_search "${base_dn}" "${SEARCH_FILTER}")"
 
-    if echo "$LOGIN_RESPONSE" | grep -q '"access_token"'; then
-        log_success "Login bem-sucedido via LDAP!"
-        echo "$LOGIN_RESPONSE" | jq . 2>/dev/null || echo "$LOGIN_RESPONSE"
+	if echo "${result}" | grep -q "^dn:"; then
+		FOUND=1
+		echo "✅ Usuário encontrado na OU/base: ${base_dn}"
+		echo "----------------------------------------------"
+		echo "${result}"
+		echo "----------------------------------------------"
+	else
+		echo "ℹ️  Nenhum resultado nesta OU."
+	fi
+done
 
-        # Extrair token
-        ACCESS_TOKEN=$(echo "$LOGIN_RESPONSE" | jq -r '.access_token' 2>/dev/null)
+if [[ "${FOUND}" -eq 1 ]]; then
+	echo ""
+	echo "🏁 Busca concluída com sucesso nas OUs mapeadas."
+	exit 0
+fi
 
-        # Verificar informações do usuário
-        separator
-        log_info "Obtendo informações do usuário autenticado..."
-        curl -s -H "Authorization: Bearer $ACCESS_TOKEN" \
-            http://localhost:8088/api/v1/security/me | jq .
+echo ""
+echo "⚠️  Usuário não encontrado nas OUs mapeadas."
+echo "🔄 Tentando busca no diretório inteiro..."
 
-    else
-        log_error "Falha ao fazer login"
-        echo "$LOGIN_RESPONSE" | jq . 2>/dev/null || echo "$LOGIN_RESPONSE"
-        return 1
-    fi
-}
+ROOT_BASE="$(directory_base_from_dn "${LDAP_BIND_DN}")"
+if [[ -z "${ROOT_BASE}" ]]; then
+	ROOT_BASE="$(directory_base_from_dn "${USER_BASES[0]}")"
+fi
 
-# =============================
-# 6. VERIFICAR LOGS DO SUPERSET
-# =============================
+if [[ -z "${ROOT_BASE}" ]]; then
+	echo "❌ Não foi possível determinar a base raiz do diretório para fallback."
+	exit 1
+fi
 
-test_superset_logs() {
-    separator
-    log_info "Verificando logs do Superset para erros LDAP..."
+fallback_result="$(run_ldap_search "${ROOT_BASE}" "${SEARCH_FILTER}")"
 
-    if command -v docker-compose &> /dev/null; then
-        log_info "Últimos logs de autenticação:"
-        docker-compose -f docker-compose-loonar.yml logs superset_app 2>/dev/null | \
-            grep -i "ldap\|auth\|security" | tail -20
-    else
-        log_warning "docker-compose não encontrado"
-    fi
-}
+if echo "${fallback_result}" | grep -q "^dn:"; then
+	echo "✅ Usuário encontrado no diretório."
+	echo "📌 Base raiz consultada: ${ROOT_BASE}"
+	echo "----------------------------------------------"
+	echo "${fallback_result}"
+	echo "----------------------------------------------"
+	echo "ℹ️  Verifique o atributo 'dn' para identificar em qual OU o usuário está."
+	exit 0
+fi
 
-# =============================
-# 7. TESTE DE MAPEAMENTO DE GRUPOS
-# =============================
-
-test_ldap_group_mapping() {
-    separator
-    log_info "Testando mapeamento de grupos LDAP para roles Superset..."
-
-    # Roles esperadas
-    ROLES=("superset_Admin" "superset_Alpha" "superset_Gamma" "superset_sql_lab")
-
-    for ROLE in "${ROLES[@]}"; do
-        ROLE_FOUND=$(ldapsearch -x \
-            -H "$LDAP_SERVER" \
-            -D "$LDAP_BIND_DN" \
-            -w "$LDAP_BIND_PASSWORD" \
-            -b "$LDAP_GROUP_BASE" \
-            "(cn=$ROLE)" \
-            cn 2>/dev/null | grep -c "^cn: $ROLE" || echo "0")
-
-        if [ "$ROLE_FOUND" -gt 0 ]; then
-            log_success "Grupo encontrado: $ROLE"
-        else
-            log_warning "Grupo não encontrado: $ROLE"
-        fi
-    done
-}
-
-# =============================
-# MENU PRINCIPAL
-# =============================
-
-show_menu() {
-    separator
-    echo "Testes de Integração LDAP/Active Directory"
-    echo ""
-    echo "1) Testar conectividade LDAP (ldapsearch)"
-    echo "2) Buscar usuários no LDAP"
-    echo "3) Buscar grupos Superset no LDAP"
-    echo "4) Verificar configuração do Superset"
-    echo "5) Testar autenticação via API REST"
-    echo "6) Verificar logs do Superset"
-    echo "7) Testar mapeamento de grupos"
-    echo "8) Executar todos os testes"
-    echo "9) Sair"
-    echo ""
-}
-
-# =============================
-# EXECUTAR TESTES
-# =============================
-
-run_all_tests() {
-    log_info "Executando todos os testes..."
-
-    test_superset_config || return 1
-    test_ldap_connection || return 1
-    test_ldap_search_users
-    test_ldap_search_groups
-    test_ldap_group_mapping
-    test_superset_logs
-    test_superset_login_api
-}
-
-# =============================
-# MAIN
-# =============================
-
-main() {
-    load_env
-
-    if [ $# -eq 0 ]; then
-        # Menu interativo
-        while true; do
-            show_menu
-            read -p "Escolha uma opção (1-9): " choice
-
-            case $choice in
-                1) test_ldap_connection ;;
-                2) test_ldap_search_users ;;
-                3) test_ldap_search_groups ;;
-                4) test_superset_config ;;
-                5) test_superset_login_api ;;
-                6) test_superset_logs ;;
-                7) test_ldap_group_mapping ;;
-                8) run_all_tests ;;
-                9) log_info "Saindo..."; exit 0 ;;
-                *) log_error "Opção inválida" ;;
-            esac
-
-            read -p "Pressione ENTER para continuar..."
-        done
-    else
-        # Modo não-interativo
-        case $1 in
-            all) run_all_tests ;;
-            connection) test_ldap_connection ;;
-            users) test_ldap_search_users ;;
-            groups) test_ldap_search_groups ;;
-            config) test_superset_config ;;
-            login) test_superset_login_api ;;
-            logs) test_superset_logs ;;
-            mapping) test_ldap_group_mapping ;;
-            *)
-                echo "Uso: $0 [all|connection|users|groups|config|login|logs|mapping]"
-                exit 1
-                ;;
-        esac
-    fi
-}
-
-# Executar main
-main "$@"
+echo "❌ Usuário não encontrado nas OUs configuradas nem no diretório inteiro (${ROOT_BASE})."
+exit 1
