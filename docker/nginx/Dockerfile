@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-FROM nginx:1.25-alpine
+FROM nginx:1.28.2-alpine
 
 # Copia arquivos de configuração e templates utilizados pelo entrypoint
 COPY docker/nginx/nginx.conf /etc/nginx/nginx.conf
