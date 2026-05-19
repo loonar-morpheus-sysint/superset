@@ -4,7 +4,7 @@
 
 set -e
 
-SRC_DIR="$(dirname "$0")/original2"
+SRC_DIR="$(dirname "$0")/original"
 DST_DIR="$(dirname "$0")"
 
 # Listar arquivos disponíveis
