@@ -232,6 +232,8 @@ RUN /app/docker/apt-install.sh \
       libecpg-dev \
       libldap2-dev \
       unixodbc-dev \
+    pkg-config \
+    default-libmysqlclient-dev \
       freetds-dev \
       freetds-bin \
       tdsodbc \
@@ -244,6 +246,25 @@ RUN curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor
     && ACCEPT_EULA=Y apt-get install -y msodbcsql18 msodbcsql17 \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
+
+# -----------------------------------------------------------------------------
+# Pre-install Python dependencies BEFORE copying the application source code.
+# Reason: qualquer mudança em `superset/` invalida o COPY abaixo, então fazer
+# as instalações pesadas aqui mantém essas camadas em cache entre edições de
+# código, reduzindo drasticamente o tempo de rebuild. Os extras mysqlclient e
+# psycopg2-binary também são instalados aqui para que `pip install .[mysql,
+# postgres]` no estágio `lean` vire no-op (deps já satisfeitas), evitando
+# recompilação de extensões nativas a cada build.
+# -----------------------------------------------------------------------------
+COPY requirements/base.txt requirements/
+RUN --mount=type=cache,target=${SUPERSET_HOME}/.cache/uv \
+    apt-get update -qq \
+    && apt-get install -yqq --no-install-recommends build-essential \
+    && uv pip install -r requirements/base.txt \
+    && uv pip install "mysqlclient>=2.1.0,<3" "psycopg2-binary==2.9.6" \
+    && apt-get autoremove -yqq --purge build-essential \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
 
 # Copy compiled things from previous stages
 COPY --from=superset-node /app/superset/static/assets superset/static/assets
@@ -266,15 +287,14 @@ EXPOSE ${SUPERSET_PORT}
 ######################################################################
 FROM python-common AS lean
 
-# Install Python dependencies using docker/pip-install.sh
-COPY requirements/base.txt requirements/
-RUN --mount=type=cache,target=${SUPERSET_HOME}/.cache/uv \
-    /app/docker/pip-install.sh --requires-build-essential -r requirements/base.txt
-# Install the superset package
+# Base requirements + extras (mysqlclient, psycopg2-binary) já foram instalados
+# em python-common para maximizar reuso de cache entre edições de código-fonte.
+# Aqui apenas instalamos o pacote superset (editable) e revalidamos os extras
+# (no-op se cache estiver quente).
 RUN --mount=type=cache,target=${SUPERSET_HOME}/.cache/uv \
     uv pip install -e .
 RUN --mount=type=cache,target=${SUPERSET_HOME}/.cache/uv \
-    uv pip install .[postgres]
+    uv pip install .[mysql,postgres]
 RUN python -m compileall /app/superset
 
 USER superset
@@ -299,7 +319,7 @@ RUN --mount=type=cache,target=${SUPERSET_HOME}/.cache/uv \
 RUN --mount=type=cache,target=${SUPERSET_HOME}/.cache/uv \
     uv pip install -e .
 
-RUN uv pip install .[postgres]
+RUN uv pip install .[mysql,postgres]
 RUN python -m compileall /app/superset
 
 USER superset
@@ -309,7 +329,7 @@ USER superset
 ######################################################################
 FROM lean AS ci
 USER root
-RUN uv pip install .[postgres]
+RUN uv pip install .[mysql,postgres]
 USER superset
 CMD ["/app/docker/entrypoints/docker-ci.sh"]
 
