@@ -7,7 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Verificar existência dos arquivos necessários
 REQUIRED_FILES=(
     "$SCRIPT_DIR/.env"
-    "../docker-compose-loonar.yml"
+    "$SCRIPT_DIR/../docker-compose-loonar.yml"
 )
 
 MISSING_FILES=()
@@ -36,6 +36,9 @@ fi
 
 echo "✓ Todos os arquivos necessários encontrados. Iniciando build..."
 
+export DOCKER_BUILDKIT=1
+export COMPOSE_DOCKER_CLI_BUILD=1
+
 cd "$SCRIPT_DIR" || exit
 cd .. # Navegar para o diretório pai onde o docker-compose-loonar.yml está localizado
-docker compose --env-file=./loonar/.env -f ./loonar/docker-compose-loonar.yml build --no-cache
+docker compose --env-file=./loonar/.env -f ./docker-compose-loonar.yml build
