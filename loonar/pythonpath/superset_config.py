@@ -397,30 +397,473 @@ MAPBOX_API_KEY = os.environ.get("MAPBOX_API_KEY", "")
 # Loonar branding (logos + theming)
 # ------------------------------------------------------------------
 _BRAND_LOGO_BASE = "/static/assets/images/loonar"
-_LIGHT_LOGO_PATH = f"{_BRAND_LOGO_BASE}/logo-light.png"
-_DARK_LOGO_PATH = f"{_BRAND_LOGO_BASE}/logo-dark.png"
+# SVG = nítido em qualquer DPI (preferido para header/branding HPE-style)
+_LIGHT_LOGO_PATH = f"{_BRAND_LOGO_BASE}/logo-light.svg"
+_DARK_LOGO_PATH = f"{_BRAND_LOGO_BASE}/logo-dark.svg"
+_FAVICON_PATH = f"{_BRAND_LOGO_BASE}/favicon.svg"
+# Fallbacks PNG (mantidos para clientes/exportações que não renderizam SVG)
+_LIGHT_LOGO_PNG = f"{_BRAND_LOGO_BASE}/logo-light.png"
 
 APP_NAME = os.environ.get("APP_NAME", "Loonar FinOps")
 APP_ICON = _LIGHT_LOGO_PATH
 LOGO_TOOLTIP = "Loonar FinOps - Powered by Superset"
 
-FAVICONS = [{"href": _LIGHT_LOGO_PATH}]
+FAVICONS = [{"href": _FAVICON_PATH}]
 
-THEME_DEFAULT: dict[str, Any] = {
+# THEME_DEFAULT: dict[str, Any] = {
+#     "token": {
+#         "brandLogoUrl": _LIGHT_LOGO_PATH,
+#         "brandLogoAlt": "Loonar FinOps",
+#         "brandLogoHeight": "40px",
+#     }
+# }
+
+# THEME_DARK: dict[str, Any] = {
+#     "token": {
+#         "brandLogoUrl": _DARK_LOGO_PATH,
+#         "brandLogoAlt": "Loonar FinOps",
+#         "brandLogoHeight": "40px",
+#     }
+# }
+
+
+ENABLE_UI_THEME_ADMINISTRATION = True
+
+THEME_DEFAULT = {
     "token": {
+        "brandAppName": "Loonar FinOps",
+        "brandLogoAlt": "Loonar FinOps",
         "brandLogoUrl": _LIGHT_LOGO_PATH,
-        "brandLogoAlt": "Loonar FinOps",
-        "brandLogoHeight": "40px",
+        "brandLogoHref": "/",
+        "brandLogoHeight": "28px",
+        "brandLogoMargin": "16px 0 18px 0",
+        # MetricHPE é proprietária HPE; usamos Metropolis (Google Fonts)
+        # como substituta web livre estilisticamente próxima ao design HPE Morpheus.
+        "fontUrls": [
+            "https://fonts.googleapis.com/css2?family=Metropolis:wght@400;500;600;700&display=swap",
+            "https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap"
+        ],
+        "fontFamily": "'Metropolis', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif",
+        "fontFamilyCode": "'IBM Plex Mono', 'Courier New', monospace",
+
+        "colorPrimary": "#01A982",
+        "colorLink": "#01A982",
+        "colorSuccess": "#01A982",
+        "colorInfo": "#01A982",
+        "colorWarning": "#F6C343",
+        "colorError": "#E85D75",
+
+        "colorTextBase": "#111827",
+        "colorText": "#111827",
+        "colorTextSecondary": "#4B5563",
+        "colorTextTertiary": "#6B7280",
+        "colorTextQuaternary": "#9CA3AF",
+
+        "colorBgBase": "#F7F9FB",
+        "colorBgLayout": "#F5F7FA",
+        "colorBgContainer": "#FFFFFF",
+        "colorBgElevated": "#FCFCFD",
+        "colorFillAlter": "#F1F5F9",
+
+        "colorBorder": "#D9E1E8",
+        "colorBorderSecondary": "#E7EDF3",
+
+        "borderRadius": 8,
+        "wireframe": False,
+
+        "fontSize": 14,
+        "sizeUnit": 4
+    },
+    "components": {
+        "Layout": {
+            "bodyBg": "#F5F7FA",
+            "headerBg": "#FFFFFF",
+            "siderBg": "#FFFFFF",
+            "triggerBg": "#F7F9FB",
+            "triggerColor": "#111827"
+        },
+        "Menu": {
+            "itemBg": "#FFFFFF",
+            "subMenuItemBg": "#FCFCFD",
+            "itemColor": "#4B5563",
+            "itemHoverColor": "#111827",
+            "itemHoverBg": "rgba(1,169,130,0.08)",
+            "itemSelectedColor": "#016B53",
+            "itemSelectedBg": "rgba(1,169,130,0.14)",
+            "itemBorderRadius": 6
+        },
+        "Button": {
+            "primaryColor": "#FFFFFF",
+            "defaultBg": "#FFFFFF",
+            "defaultBorderColor": "#D9E1E8",
+            "defaultColor": "#111827",
+            "defaultHoverBg": "#F9FBFC",
+            "defaultHoverBorderColor": "#01A982",
+            "defaultHoverColor": "#016B53",
+            "defaultActiveBg": "#F3F8F6",
+            "defaultActiveBorderColor": "#01A982",
+            "defaultActiveColor": "#016B53",
+            "borderRadius": 8
+        },
+        "Input": {
+            "colorBgContainer": "#FFFFFF",
+            "colorBorder": "#D9E1E8",
+            "hoverBorderColor": "#01A982",
+            "activeBorderColor": "#01A982",
+            "activeShadow": "0 0 0 2px rgba(1,169,130,0.14)",
+            "colorText": "#111827",
+            "colorTextPlaceholder": "#9CA3AF"
+        },
+        "Card": {
+            "colorBgContainer": "#FFFFFF",
+            "headerBg": "#FFFFFF",
+            "colorBorderSecondary": "#E7EDF3"
+        },
+        "Tabs": {
+            "itemColor": "#6B7280",
+            "itemSelectedColor": "#016B53",
+            "itemHoverColor": "#111827",
+            "inkBarColor": "#01A982"
+        },
+        "Table": {
+            "headerBg": "#F9FAFB",
+            "headerColor": "#111827",
+            "rowHoverBg": "rgba(1,169,130,0.05)",
+            "borderColor": "#E7EDF3"
+        }
+    },
+    "echartsOptionsOverrides": {
+        "color": [
+            "#01A982",
+            "#2D9CDB",
+            "#F6C343",
+            "#E85D75",
+            "#7C5CFC",
+            "#7F8C8D",
+            "#16A34A",
+            "#F97316"
+        ],
+        "backgroundColor": "transparent",
+        "textStyle": {
+            "fontFamily": "Metropolis, Inter, Arial, sans-serif",
+            "color": "#111827"
+        },
+        "title": {
+            "textStyle": {
+                "color": "#111827",
+                "fontWeight": 600
+            },
+            "subtextStyle": {
+                "color": "#6B7280"
+            }
+        },
+        "legend": {
+            "textStyle": {
+                "color": "#4B5563",
+                "fontFamily": "Metropolis, Inter, Arial, sans-serif"
+            }
+        },
+        "grid": {
+            "left": "6%",
+            "right": "4%",
+            "top": "12%",
+            "bottom": "10%",
+            "containLabel": True
+        },
+        "tooltip": {
+            "backgroundColor": "rgba(17,24,39,0.96)",
+            "borderColor": "#01A982",
+            "textStyle": {
+                "color": "#FFFFFF",
+                "fontFamily": "Metropolis, Inter, Arial, sans-serif"
+            }
+        },
+        "xAxis": {
+            "axisLine": {
+                "lineStyle": {
+                    "color": "#CBD5E1"
+                }
+            },
+            "axisLabel": {
+                "color": "#6B7280",
+                "fontFamily": "Metropolis, Inter, Arial, sans-serif"
+            },
+            "splitLine": {
+                "lineStyle": {
+                    "color": "#EEF2F7"
+                }
+            }
+        },
+        "yAxis": {
+            "axisLine": {
+                "lineStyle": {
+                    "color": "#CBD5E1"
+                }
+            },
+            "axisLabel": {
+                "color": "#6B7280",
+                "fontFamily": "Metropolis, Inter, Arial, sans-serif"
+            },
+            "splitLine": {
+                "lineStyle": {
+                    "color": "#EEF2F7"
+                }
+            }
+        }
+    },
+    "echartsOptionsOverridesByChartType": {
+        "echarts_timeseries": {
+            "xAxis": {
+                "axisLabel": {
+                    "fontSize": 11
+                }
+            },
+            "dataZoom": [
+                {
+                    "type": "inside",
+                    "start": 0,
+                    "end": 100
+                }
+            ]
+        },
+        "echarts_pie": {
+            "legend": {
+                "orient": "vertical",
+                "right": 10,
+                "top": "center",
+                "textStyle": {
+                    "fontSize": 12
+                }
+            }
+        },
+        "echarts_gauge": {
+            "title": {
+                "color": "#4B5563"
+            },
+            "detail": {
+                "color": "#111827"
+            }
+        }
     }
 }
 
-THEME_DARK: dict[str, Any] = {
+THEME_DARK = {
+    "algorithm": "dark",
     "token": {
-        "brandLogoUrl": _DARK_LOGO_PATH,
+        "brandAppName": "Loonar FinOps",
         "brandLogoAlt": "Loonar FinOps",
-        "brandLogoHeight": "40px",
+        "brandLogoUrl": _DARK_LOGO_PATH,
+        "brandLogoHref": "/",
+        "brandLogoHeight": "28px",
+        "brandLogoMargin": "16px 0 18px 0",
+        "fontUrls": [
+            "https://fonts.googleapis.com/css2?family=Metropolis:wght@400;500;600;700&display=swap",
+            "https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap"
+        ],
+        "fontFamily": "'Metropolis', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif",
+        "fontFamilyCode": "'IBM Plex Mono', 'Courier New', monospace",
+
+        "colorPrimary": "#01A982",
+        "colorLink": "#01A982",
+        "colorSuccess": "#01A982",
+        "colorInfo": "#01A982",
+        "colorWarning": "#F6C343",
+        "colorError": "#E85D75",
+
+        "colorTextBase": "#F3F6F9",
+        "colorText": "#F3F6F9",
+        "colorTextSecondary": "#B8C2CC",
+        "colorTextTertiary": "#8A97A6",
+        "colorTextQuaternary": "#667281",
+
+        "colorBgBase": "#0B0F14",
+        "colorBgLayout": "#0B0F14",
+        "colorBgContainer": "#121820",
+        "colorBgElevated": "#161D26",
+        "colorFillAlter": "#1A222D",
+
+        "colorBorder": "#2A3441",
+        "colorBorderSecondary": "#1D2630",
+
+        "borderRadius": 8,
+        "wireframe": False,
+
+        "fontSize": 14,
+        "sizeUnit": 4
+    },
+    "components": {
+        "Layout": {
+            "bodyBg": "#0B0F14",
+            "headerBg": "#0F141A",
+            "siderBg": "#0F141A",
+            "triggerBg": "#121820",
+            "triggerColor": "#F3F6F9"
+        },
+        "Menu": {
+            "darkItemBg": "#0F141A",
+            "darkSubMenuItemBg": "#121820",
+            "darkItemColor": "#B8C2CC",
+            "darkItemHoverColor": "#FFFFFF",
+            "darkItemHoverBg": "rgba(1,169,130,0.10)",
+            "darkItemSelectedColor": "#FFFFFF",
+            "darkItemSelectedBg": "#01A982",
+            "itemBorderRadius": 6
+        },
+        "Button": {
+            "primaryColor": "#08110E",
+            "defaultBg": "#161D26",
+            "defaultBorderColor": "#2A3441",
+            "defaultColor": "#F3F6F9",
+            "defaultHoverBg": "#1B2430",
+            "defaultHoverBorderColor": "#01A982",
+            "defaultHoverColor": "#01A982",
+            "defaultActiveBg": "#121820",
+            "defaultActiveBorderColor": "#01A982",
+            "defaultActiveColor": "#01A982",
+            "borderRadius": 8
+        },
+        "Input": {
+            "colorBgContainer": "#121820",
+            "colorBorder": "#2A3441",
+            "hoverBorderColor": "#01A982",
+            "activeBorderColor": "#01A982",
+            "activeShadow": "0 0 0 2px rgba(1,169,130,0.18)",
+            "colorText": "#F3F6F9",
+            "colorTextPlaceholder": "#667281"
+        },
+        "Card": {
+            "colorBgContainer": "#121820",
+            "headerBg": "#121820",
+            "colorBorderSecondary": "#1D2630"
+        },
+        "Tabs": {
+            "itemColor": "#8A97A6",
+            "itemSelectedColor": "#01A982",
+            "itemHoverColor": "#FFFFFF",
+            "inkBarColor": "#01A982"
+        },
+        "Table": {
+            "headerBg": "#161D26",
+            "headerColor": "#F3F6F9",
+            "rowHoverBg": "rgba(1,169,130,0.06)",
+            "borderColor": "#1D2630"
+        }
+    },
+    "echartsOptionsOverrides": {
+        "color": [
+            "#01A982",
+            "#56CCF2",
+            "#F6C343",
+            "#E85D75",
+            "#A78BFA",
+            "#94A3B8",
+            "#22C55E",
+            "#FB923C"
+        ],
+        "backgroundColor": "transparent",
+        "textStyle": {
+            "fontFamily": "Metropolis, Inter, Arial, sans-serif",
+            "color": "#F3F6F9"
+        },
+        "title": {
+            "textStyle": {
+                "color": "#F3F6F9",
+                "fontWeight": 600
+            },
+            "subtextStyle": {
+                "color": "#8A97A6"
+            }
+        },
+        "legend": {
+            "textStyle": {
+                "color": "#B8C2CC",
+                "fontFamily": "Metropolis, Inter, Arial, sans-serif"
+            }
+        },
+        "grid": {
+            "left": "6%",
+            "right": "4%",
+            "top": "12%",
+            "bottom": "10%",
+            "containLabel": True
+        },
+        "tooltip": {
+            "backgroundColor": "rgba(15,20,26,0.96)",
+            "borderColor": "#01A982",
+            "textStyle": {
+                "color": "#F3F6F9",
+                "fontFamily": "Metropolis, Inter, Arial, sans-serif"
+            }
+        },
+        "xAxis": {
+            "axisLine": {
+                "lineStyle": {
+                    "color": "#344150"
+                }
+            },
+            "axisLabel": {
+                "color": "#8A97A6",
+                "fontFamily": "Metropolis, Inter, Arial, sans-serif"
+            },
+            "splitLine": {
+                "lineStyle": {
+                    "color": "#1D2630"
+                }
+            }
+        },
+        "yAxis": {
+            "axisLine": {
+                "lineStyle": {
+                    "color": "#344150"
+                }
+            },
+            "axisLabel": {
+                "color": "#8A97A6",
+                "fontFamily": "Metropolis, Inter, Arial, sans-serif"
+            },
+            "splitLine": {
+                "lineStyle": {
+                    "color": "#1D2630"
+                }
+            }
+        }
+    },
+    "echartsOptionsOverridesByChartType": {
+        "echarts_timeseries": {
+            "xAxis": {
+                "axisLabel": {
+                    "fontSize": 11
+                }
+            },
+            "dataZoom": [
+                {
+                    "type": "inside",
+                    "start": 0,
+                    "end": 100
+                }
+            ]
+        },
+        "echarts_pie": {
+            "legend": {
+                "orient": "vertical",
+                "right": 10,
+                "top": "center",
+                "textStyle": {
+                    "fontSize": 12
+                }
+            }
+        },
+        "echarts_gauge": {
+            "title": {
+                "color": "#B8C2CC"
+            },
+            "detail": {
+                "color": "#F3F6F9"
+            }
+        }
     }
 }
+
 
 # ------------------------------------------------------------------
 # Configuração de moedas disponíveis no dropdown do frontend

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Loonar FinOps brand mark - dark theme variant (HPE Morpheus inspired).
+  Original design; does not reproduce HPE trademarks.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 56" role="img" aria-label="Loonar FinOps">
+  <title>Loonar FinOps</title>
+  <rect x="4" y="14" width="36" height="10" fill="#01A982"/>
+  <g font-family="Metropolis, Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif"
+     fill="#F3F6F9">
+    <text x="52" y="28" font-size="22" font-weight="700" letter-spacing="0.2">Loonar</text>
+    <text x="52" y="46" font-size="12" font-weight="500" fill="#B8C2CC" letter-spacing="2">FINOPS</text>
+  </g>
+</svg>
