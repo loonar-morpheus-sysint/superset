@@ -1,6 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Loonar FinOps">
-  <title>Loonar FinOps</title>
-  <rect width="64" height="64" rx="10" fill="#0B0F14"/>
-  <rect x="10" y="26" width="44" height="12" fill="#01A982"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Loonar">
+  <title>Loonar</title>
+  <!-- Square background -->
+  <rect width="64" height="64" rx="12" fill="#0B0F14"/>
+  
+  <!-- Nested circles element (O) centered as favicon mark -->
+  <g fill="none" stroke="#F3F6F9" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="32" cy="32" r="18" />
+    <circle cx="40" cy="24" r="8" />
+  </g>
 </svg>

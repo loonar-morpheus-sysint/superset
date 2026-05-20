@@ -59,8 +59,10 @@ x-superset-env: &superset-env
     required: false
 
 x-superset-volumes:
-  &superset-volumes # Volumes de dados persistentes apenas (customizações já estão embutidas na imagem)
+  &superset-volumes # Volumes de dados e mapeamento de customizações locais para dev
   - superset_home_data:/app/superset_home
+  - ./loonar/pythonpath:/app/pythonpath:ro
+  - ./loonar/logo:/app/superset/static/assets/images/loonar:ro
 
 x-extra-hosts: &superset-extra-hosts
   - "host.docker.internal:host-gateway"

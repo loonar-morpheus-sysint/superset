@@ -1,14 +1,27 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Loonar FinOps brand mark - dark theme variant (HPE Morpheus inspired).
-  Original design; does not reproduce HPE trademarks.
+  Loonar brand mark (dark theme).
+  Matches reference logo perfectly using SVG paths.
+  Inverted colors for dark backgrounds.
 -->
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 56" role="img" aria-label="Loonar FinOps">
-  <title>Loonar FinOps</title>
-  <rect x="4" y="14" width="36" height="10" fill="#01A982"/>
-  <g font-family="Metropolis, Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif"
-     fill="#F3F6F9">
-    <text x="52" y="28" font-size="22" font-weight="700" letter-spacing="0.2">Loonar</text>
-    <text x="52" y="46" font-size="12" font-weight="500" fill="#B8C2CC" letter-spacing="2">FINOPS</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 56" role="img" aria-label="Loonar">
+  <title>Loonar</title>
+  
+  <g fill="none" stroke="#F3F6F9" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+    <!-- L -->
+    <path d="M 18,16 V 34 a 8,8 0 0,0 8,8 h 10" />
+    
+    <!-- O (Outer and Inner circles) -->
+    <circle cx="65" cy="28" r="16" />
+    <circle cx="72.5" cy="20.5" r="7.5" />
+    
+    <!-- N -->
+    <path d="M 100,42 V 14 L 126,42 V 14" />
+    
+    <!-- A -->
+    <path d="M 144,42 L 158,14 L 172,42 M 148,32 h 20" />
+    
+    <!-- R -->
+    <path d="M 190,42 V 14 h 14 a 9,9 0 0,1 0,18 h -14 M 200,32 c 4,0 6,2 9,10" />
   </g>
 </svg>

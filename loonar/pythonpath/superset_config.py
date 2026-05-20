@@ -316,6 +316,13 @@ FEATURE_FLAGS = {
     "THUMBNAILS_SQLA_LISTENERS": True,
     "ENABLE_FLASK_LOGIN": True,
     "DISABLE_REACT_LOGIN": True,
+    "SEMANTIC_LAYERS": True,
+    "DATASET_FOLDERS": True,
+    "AG_GRID_TABLE_ENABLED": True,
+    "USE_ANALOGOUS_COLORS": True,
+    "DRILL_BY": True,
+    "EMBEDDABLE_CHARTS": True,
+    "EMBEDDED_SUPERSET": True
 }
 
 # WebDriver for thumbnails/alerts
