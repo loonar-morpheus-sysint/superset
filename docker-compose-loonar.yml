@@ -206,6 +206,7 @@ services:
       args:
         BUILD_TRANSLATIONS: 'true'
     container_name: superset_worker
+    network_mode: "host"
     command:
       - /app/docker/docker-bootstrap.sh
       - worker
@@ -219,6 +220,8 @@ services:
       - ./loonar/pythonpath:/app/pythonpath:ro
       - ./loonar/logo:/app/superset/static/assets/images/loonar:ro
     extra_hosts:
+      - "db:127.0.0.1"
+      - "redis:127.0.0.1"
       - host.docker.internal:host-gateway
       - ${SUPERSET_HOST:-superset.local}:host-gateway
     healthcheck:
@@ -235,8 +238,6 @@ services:
       options:
         max-size: 10m
         max-file: '1'
-    networks:
-      - superset
 
   superset_worker_beat:
     env_file:
@@ -254,6 +255,7 @@ services:
       args:
         BUILD_TRANSLATIONS: 'true'
     container_name: superset_worker_beat
+    network_mode: "host"
     command:
       - /app/docker/docker-bootstrap.sh
       - beat
@@ -267,10 +269,10 @@ services:
       - ./loonar/pythonpath:/app/pythonpath:ro
       - ./loonar/logo:/app/superset/static/assets/images/loonar:ro
     extra_hosts:
+      - "db:127.0.0.1"
+      - "redis:127.0.0.1"
       - host.docker.internal:host-gateway
       - ${SUPERSET_HOST:-superset.local}:host-gateway
-    networks:
-      - superset
     healthcheck:
       disable: true
     logging:
@@ -295,6 +297,7 @@ services:
       args:
         BUILD_TRANSLATIONS: 'true'
     container_name: superset_init
+    network_mode: "host"
     command:
       - /app/docker/docker-init.sh
     user: root
@@ -309,10 +312,10 @@ services:
       - ./loonar/pythonpath:/app/pythonpath:ro
       - ./loonar/logo:/app/superset/static/assets/images/loonar:ro
     extra_hosts:
+      - "db:127.0.0.1"
+      - "redis:127.0.0.1"
       - host.docker.internal:host-gateway
       - ${SUPERSET_HOST:-superset.local}:host-gateway
-    networks:
-      - superset
     healthcheck:
       disable: true
     logging:
