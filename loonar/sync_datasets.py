@@ -3,9 +3,6 @@ import sys
 import logging
 
 from superset.app import create_app
-from superset.extensions import db
-from superset.models.core import Database
-from superset.connectors.sqla.models import SqlaTable
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -20,6 +17,10 @@ def main():
 
     app = create_app()
     with app.app_context():
+        from superset.extensions import db
+        from superset.models.core import Database
+        from superset.connectors.sqla.models import SqlaTable
+
         database = db.session.query(Database).filter_by(database_name=args.database).first()
         if not database:
             logger.error(f"Database '{args.database}' not found in Superset!")
