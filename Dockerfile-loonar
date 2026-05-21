@@ -91,6 +91,9 @@ FROM superset-node-ci AS superset-node
 # Copy translations from superset-node-ci stage
 COPY --from=superset-node-ci /app/superset/translations /app/superset/translations
 
+# Aumentar o limite de memória do Node.js para evitar OOM no webpack
+ENV NODE_OPTIONS="--max-old-space-size=6144"
+
 # Build the frontend if not in dev mode
 RUN --mount=type=cache,target=/root/.npm \
     if [ "$DEV_MODE" = "false" ]; then \
