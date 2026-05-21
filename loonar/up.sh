@@ -340,7 +340,14 @@ EOF
 echo "🚀 Implantando Superset Loonar"
 select_context
 select_build_mode
-select_ldap_mode
+
+LOGIN_FORM_TYPE=$(get_env_value "SUPERSET_LOGIN_FORM_TYPE" "superset")
+if [ "$LOGIN_FORM_TYPE" != "superset" ]; then
+    select_ldap_mode
+else
+    echo "⏭️  Pulando configuração LDAP (SUPERSET_LOGIN_FORM_TYPE=superset)"
+fi
+
 select_init_mode
 
 
