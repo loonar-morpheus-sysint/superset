@@ -14,7 +14,7 @@ COMPOSE_FILE="../docker-compose-loonar.yml"
 echo "================================================="
 echo "1. Copiando script para o container..."
 echo "================================================="
-docker compose -f "$COMPOSE_FILE" cp sync_datasets.py superset:/tmp/sync_datasets.py
+docker compose -f "$COMPOSE_FILE" cp sync_datasets.py superset_app:/tmp/sync_datasets.py
 
 if [ $? -ne 0 ]; then
     echo "Erro ao copiar o script. O container 'superset' está rodando?"
