@@ -137,7 +137,7 @@ PROJECT.md
 
 loonar/volumes
 .env
-/loonar/ssl-certs
+
 
 volumes/
 /loonar/ad-user.txt
@@ -155,3 +155,6 @@ backup
 **/.venv/
 loonar/.env-hom
 loonar/.env-hom
+loonar/ssl-certs/superset.key
+loonar/ssl-certs/superset.crt
+loonar/ssl-certs/superset-ca.crt
