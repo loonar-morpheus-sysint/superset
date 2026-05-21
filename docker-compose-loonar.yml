@@ -89,6 +89,8 @@ services:
         required: false
     command: |
       sh -c 'redis-server /usr/local/etc/redis/redis.conf --requirepass "$${REDIS_PASSWORD}"'
+    ports:
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -120,6 +122,8 @@ services:
       dockerfile: docker/postgres/Dockerfile
     container_name: superset_db
     restart: unless-stopped
+    ports:
+      - "127.0.0.1:5432:5432"
     volumes:
       - db_data:/var/lib/postgresql/data
     healthcheck:
@@ -157,6 +161,7 @@ services:
     # Opção alternativa: Usar imagem oficial (descomente as linhas abaixo e comente o 'build' acima)
     # image: apache/superset:latest
     container_name: superset_app
+    network_mode: "host"
     command:
       - /app/docker/docker-bootstrap.sh
       - app-gunicorn
@@ -167,6 +172,8 @@ services:
       - ./loonar/pythonpath:/app/pythonpath:ro
       - ./loonar/logo:/app/superset/static/assets/images/loonar:ro
     extra_hosts:
+      - "db:127.0.0.1"
+      - "redis:127.0.0.1"
       - host.docker.internal:host-gateway
       - ${SUPERSET_HOST:-superset.local}:host-gateway
     healthcheck:
@@ -182,8 +189,6 @@ services:
       options:
         max-size: 10m
         max-file: '1'
-    networks:
-      - superset
 
   superset_worker:
     env_file:
@@ -343,6 +348,8 @@ services:
     volumes:
       - nginx_logs_data:/var/log/nginx
       - ./loonar/ssl-certs:/etc/nginx/certs:ro
+    extra_hosts:
+      - "superset_app:host-gateway"
     # Para produção, configure regras de firewall para expor apenas as portas necessárias
     healthcheck:
       test:
