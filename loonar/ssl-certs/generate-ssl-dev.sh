@@ -1,56 +1,60 @@
 #!/bin/bash
-# Gera certificados SSL autoassinados para desenvolvimento do Superset
+# Script para gerar CA e certificado SSL assinado por ela
 # Uso: bash generate-ssl-dev.sh
-# Os arquivos gerados DEVEM ter exatamente estes nomes para funcionar com o docker-compose/nginx:
-#   superset.crt  (certificado)
-#   superset.key  (chave privada)
-#   superset-ca.crt (CA confiável, opcional)
-# Eles serão montados em /etc/nginx/certs dentro do container.
+# Gera:
+#   superset-ca.key  (chave privada da CA)
+#   superset-ca.crt  (certificado raiz da CA)
+#   superset.key     (chave privada do servidor)
+#   superset.crt     (certificado do servidor assinado pela CA)
+
 set -e
 
 CERT_DIR="$(dirname "$0")"
+CERT_CA_KEY="$CERT_DIR/superset-ca.key"
+CERT_CA_CRT="$CERT_DIR/superset-ca.crt"
 CERT_KEY="$CERT_DIR/superset.key"
+CERT_CSR="$CERT_DIR/superset.csr"
 CERT_CRT="$CERT_DIR/superset.crt"
-CERT_CA="$CERT_DIR/superset-ca.crt"
 
-# Parâmetros customizáveis
 DAYS=3650
 
 # Caminho do .env (um nível acima do diretório do script)
 ENV_FILE="$CERT_DIR/../.env"
 if [ ! -f "$ENV_FILE" ]; then
-	echo "Arquivo .env não encontrado em $ENV_FILE"
-	exit 1
+    echo "Arquivo .env não encontrado em $ENV_FILE"
+    exit 1
 fi
 
-# Extrai SUPERSET_HOST do .env
 SUPERSET_HOST=$(grep '^SUPERSET_HOST=' "$ENV_FILE" | cut -d'=' -f2 | tr -d '"' | tr -d "'" | xargs)
 if [ -z "$SUPERSET_HOST" ]; then
-	echo "Variável SUPERSET_HOST não encontrada no .env"
-	exit 1
+    echo "Variável SUPERSET_HOST não encontrada no .env"
+    exit 1
 fi
 
-SUBJECT="/C=BR/ST=Dev/L=Dev/O=Superset Dev/OU=Dev/CN=$SUPERSET_HOST"
+# 1. Gera chave e certificado da CA
+openssl genrsa -out "$CERT_CA_KEY" 4096
+openssl req -x509 -new -nodes -key "$CERT_CA_KEY" -sha256 -days $DAYS \
+    -out "$CERT_CA_CRT" \
+    -subj "/C=BR/ST=Dev/L=Dev/O=Superset Dev CA/OU=Dev/CN=SupersetDevCA"
 
-# Gera chave privada
+# 2. Gera chave privada do servidor
 openssl genrsa -out "$CERT_KEY" 4096
 
-# Gera certificado autoassinado com SAN igual ao host
-openssl req -x509 -new -nodes -key "$CERT_KEY" -sha256 -days $DAYS -out "$CERT_CRT" \
-	-subj "$SUBJECT" \
-	-addext "subjectAltName=DNS:$SUPERSET_HOST"
+# 3. Gera CSR para o servidor
+openssl req -new -key "$CERT_KEY" -out "$CERT_CSR" \
+    -subj "/C=BR/ST=Dev/L=Dev/O=Superset Dev/OU=Dev/CN=$SUPERSET_HOST"
 
-# Opcional: gera um CA intermediário para confiar no navegador (desenvolvimento)
-openssl req -x509 -new -nodes -key "$CERT_KEY" -sha256 -days $DAYS -out "$CERT_CA" -subj "/C=BR/ST=Dev/L=Dev/O=Superset Dev CA/OU=Dev/CN=SupersetDevCA"
+# 4. Assina o CSR com a CA
+openssl x509 -req -in "$CERT_CSR" -CA "$CERT_CA_CRT" -CAkey "$CERT_CA_KEY" \
+    -CAcreateserial -out "$CERT_CRT" -days $DAYS -sha256 \
+    -extfile <(printf "subjectAltName=DNS:$SUPERSET_HOST")
 
-chmod 600 "$CERT_KEY"
-chmod 644 "$CERT_CRT" "$CERT_CA"
+chmod 600 "$CERT_CA_KEY" "$CERT_KEY"
+chmod 644 "$CERT_CA_CRT" "$CERT_CRT"
 
-echo "Certificados gerados em $CERT_DIR com nomes genéricos para fácil troca em produção:"
-echo "- superset.key      (chave privada)"
-echo "- superset.crt      (certificado)"
-echo "- superset-ca.crt   (CA para confiar no navegador, opcional)"
+echo "Certificados gerados em $CERT_DIR:"
+echo "- superset-ca.key   (chave privada da CA)"
+echo "- superset-ca.crt   (certificado raiz da CA)"
+echo "- superset.key      (chave privada do servidor)"
+echo "- superset.crt      (certificado do servidor assinado pela CA)"
 echo ""
-echo "Esses nomes permitem substituir facilmente por certificados reais no futuro."
-echo "\nConfigure as variáveis de ambiente no nginx:\n  SSL_CERT=/etc/nginx/certs/superset.crt\n  SSL_KEY=/etc/nginx/certs/superset.key\n  SSL_TRUSTED=/etc/nginx/certs/superset-ca.crt\n"
-echo "Para confiar no navegador, importe superset-ca.crt como Autoridade Certificadora (CA) confiável."
