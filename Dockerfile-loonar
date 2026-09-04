@@ -53,8 +53,11 @@ ARG NPM_BUILD_CMD="build"
 RUN /app/docker/apt-install.sh build-essential python3 zstd
 
 # Define environment variables for frontend build
+# PUPPETEER_SKIP_DOWNLOAD is the var name used by puppeteer>=22; keep the legacy
+# one too for compatibility with older transitive versions
 ENV BUILD_CMD=${NPM_BUILD_CMD} \
-    PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+    PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
+    PUPPETEER_SKIP_DOWNLOAD=true
 
 # Run the frontend memory monitoring script
 RUN /app/docker/frontend-mem-nag.sh
