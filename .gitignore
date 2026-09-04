@@ -158,6 +158,7 @@ loonar/.env-hom
 loonar/ssl-certs/superset.key
 loonar/ssl-certs/superset.crt
 loonar/ssl-certs/superset-ca.crt
+loonar/.env
 /loonar/ssl-certs/*.key
 *.srl
 *.csr
